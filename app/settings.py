@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
@@ -31,5 +32,12 @@ class Settings(BaseSettings):
 
     # NEW: streaming
     stream_chunk_chars: int = 80
+
+    # Admin endpoint protection
+    admin_api_key: str = ""
+
+    # Restrict admin ingest to this filesystem root
+    ingest_root: str = "/data/uploads"
+
 
 settings = Settings()

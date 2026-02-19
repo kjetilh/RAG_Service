@@ -31,6 +31,7 @@ Dette repoet er ment som:
 - Compose-oppsett (API + DB): `docker/docker-compose.yml`
 - Miljøvariabler: `.env.example`
 - SQL schema: `app/rag/index/schema.sql`
+- VPS-guide: `docs/DEPLOY_VPS.md`
 
 ## PostgreSQL Dockerfile
 
@@ -84,6 +85,7 @@ cp .env.example .env
 
 Sett minst:
 - `LLM_API_KEY`
+- `ADMIN_API_KEY`
 - `DATABASE_URL=postgresql+psycopg://rag:rag@localhost:5432/ragdb`
 
 4. Start database i Docker.
@@ -118,7 +120,7 @@ uvicorn app.main:app --reload --port 8000
 cp .env.example .env
 ```
 
-2. Sett `LLM_API_KEY` i `.env`.
+2. Sett minst `LLM_API_KEY` og `ADMIN_API_KEY` i `.env`.
 
 3. Start hele stacken.
 
@@ -132,13 +134,30 @@ docker compose -f docker/docker-compose.yml up -d --build
 curl http://localhost:8000/health
 ```
 
+## Ingest via opplastingsmappe i Docker
+
+API-containeren får tilgang til `uploads/` i repoet via volume-mapping til `/data/uploads`.
+
+Legg filer i f.eks. `uploads/team_docs/`, og kall admin-ingest:
+
+```bash
+curl -X POST http://localhost:8000/v1/admin/ingest \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: <DIN_ADMIN_API_KEY>" \
+  -d '{"path":"team_docs","source_type":"paper"}'
+```
+
+Merk:
+- `path` må ligge under `INGEST_ROOT` (default `/data/uploads`).
+- Admin-endepunkter er deaktivert hvis `ADMIN_API_KEY` ikke er satt.
+
 ## API-endepunkter
 
 - `GET /health`
 - `POST /v1/chat`
 - `POST /v1/chat/stream`
-- `POST /v1/admin/rebuild` (krever `{"confirm": true}`)
-- `POST /v1/admin/ingest`
+- `POST /v1/admin/rebuild` (krever `X-API-Key` + `{"confirm": true}`)
+- `POST /v1/admin/ingest` (krever `X-API-Key`)
 
 ## Miljøvariabler du oftest justerer
 
@@ -146,6 +165,8 @@ curl http://localhost:8000/health
 - `LLM_BASE_URL`
 - `LLM_API_KEY`
 - `LLM_MODEL`
+- `ADMIN_API_KEY`
+- `INGEST_ROOT`
 - `QUERY_REWRITE_ENABLED`
 - `RERANKER_ENABLED`
 - `GROUNDING_MIN_CITATIONS`
@@ -164,9 +185,8 @@ curl http://localhost:8000/health
 Repoet er klart for:
 
 ```bash
-git init
 git add .
 git commit -m "Initial commit: rag-service baseline"
 ```
 
-Deretter kan remote settes når nytt repo er opprettet.
+Deretter kan remote settes/pushes.

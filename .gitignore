@@ -14,5 +14,8 @@ logs/
 *_done/
 *_failed/
 
+uploads/*
+!uploads/.gitkeep
+
 .tmp*
 rag_patch_v5.zip

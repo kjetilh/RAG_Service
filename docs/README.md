@@ -8,6 +8,7 @@ Denne mappen inneholder driftsnotater og arbeidsdokumenter.
 
 ## Dokumenter i denne mappen
 
+- `DEPLOY_VPS.md`: konkret VPS-oppsett for testing med flere brukere.
 - `01_Ops_Oppsummering.md`: historisk oppsummering av feil/løsninger under utvikling.
 - `02_Kjor_Alt.md`: steg-for-steg lokal kjøring.
 - `03_README_Snutt.md`: kort oppstartssnutt.
