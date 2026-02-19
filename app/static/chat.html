@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="no">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RAG Chat</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; padding: 0; }
+    header { padding: 16px 20px; border-bottom: 1px solid #e5e5e5; display:flex; gap:12px; align-items:center; }
+    header h1 { font-size: 16px; margin: 0; }
+    header .muted { color:#666; font-size: 13px; }
+    main { padding: 16px 20px; max-width: 980px; margin: 0 auto; }
+    .row { display:flex; gap: 10px; align-items:flex-start; }
+    textarea { width: 100%; min-height: 70px; resize: vertical; padding: 10px; font-size: 14px; }
+    button { padding: 10px 14px; font-size: 14px; cursor:pointer; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .panel { border: 1px solid #e5e5e5; border-radius: 10px; padding: 12px; margin-top: 14px; }
+    .chatlog { white-space: pre-wrap; line-height: 1.35; }
+    .answer { white-space: pre-wrap; line-height: 1.35; }
+    .kilder ul { margin: 8px 0 0 18px; padding: 0; }
+    .kilder li { margin: 6px 0; }
+    .badge { display:inline-block; padding: 2px 8px; border: 1px solid #ddd; border-radius: 999px; font-size: 12px; color:#333; }
+    .split { display:grid; grid-template-columns: 2fr 1fr; gap: 12px; }
+    @media (max-width: 900px) { .split { grid-template-columns: 1fr; } }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>RAG Chat</h1>
+    <span class="badge" id="status">klar</span>
+    <span class="muted">/v1/chat/stream (SSE)</span>
+    <span class="muted" style="margin-left:auto;">Tips: se også <a href="/docs">/docs</a></span>
+  </header>
+
+  <main>
+    <div class="row">
+      <textarea id="q" placeholder="Skriv spørsmålet ditt her..."></textarea>
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <button id="send">Send</button>
+        <button id="stop" disabled>Stopp</button>
+      </div>
+    </div>
+
+    <div class="split">
+      <div class="panel">
+        <div class="row" style="justify-content:space-between; align-items:center;">
+          <strong>Svar</strong>
+          <span class="muted mono" id="mode">streaming</span>
+        </div>
+        <div class="answer" id="answer"></div>
+      </div>
+
+      <div class="panel kilder">
+        <div class="row" style="justify-content:space-between; align-items:center;">
+          <strong>Kilder</strong>
+          <span class="muted mono" id="citCount">0</span>
+        </div>
+        <ul id="citations"></ul>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="row" style="justify-content:space-between; align-items:center;">
+        <strong>Debug</strong>
+        <span class="muted mono">SSE events: citations, delta, done</span>
+      </div>
+      <div class="chatlog mono" id="debug"></div>
+    </div>
+  </main>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const q = $("q");
+  const sendBtn = $("send");
+  const stopBtn = $("stop");
+  const answerEl = $("answer");
+  const citationsEl = $("citations");
+  const statusEl = $("status");
+  const debugEl = $("debug");
+  const citCountEl = $("citCount");
+
+  let aborter = null;
+
+  function setStatus(text) {
+    statusEl.textContent = text;
+  }
+
+  function logDebug(line) {
+    debugEl.textContent += line + "\n";
+    debugEl.scrollTop = debugEl.scrollHeight;
+  }
+
+  function clearUI() {
+    answerEl.textContent = "";
+    citationsEl.innerHTML = "";
+    debugEl.textContent = "";
+    citCountEl.textContent = "0";
+  }
+
+  function escapeHtml(s) {
+    return String(s)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  function renderCitations(citations) {
+    citationsEl.innerHTML = "";
+    citCountEl.textContent = String(citations.length);
+    citations.forEach((c, idx) => {
+      const li = document.createElement("li");
+      const title = (c.title || "(uten tittel)");
+      const meta = [
+        c.author ? c.author : null,
+        c.year ? String(c.year) : null,
+        c.source_type ? String(c.source_type) : null
+      ].filter(Boolean).join(" · ");
+
+      const score = (typeof c.score === "number") ? c.score.toFixed(3) : "";
+
+      li.innerHTML = `<div><strong>[${idx+1}]</strong> ${escapeHtml(title)}</div>
+                      <div class="muted mono">${escapeHtml(meta)}${meta && score ? " · " : ""}${score ? "score=" + score : ""}</div>
+                      <div class="mono" style="margin-top:4px;">${escapeHtml(c.excerpt || "").slice(0, 500)}${(c.excerpt && c.excerpt.length>500) ? "…" : ""}</div>`;
+      citationsEl.appendChild(li);
+    });
+  }
+
+
+
+  async function sendStreaming() {
+    const message = q.value.trim();
+    if (!message) return;
+
+    clearUI();
+    setStatus("sender…");
+    sendBtn.disabled = true;
+    stopBtn.disabled = false;
+
+    aborter = new AbortController();
+
+    const res = await fetch("/v1/chat/stream", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "text/event-stream",
+      },
+      body: JSON.stringify({ message }),
+      signal: aborter.signal,
+    });
+
+    if (!res.ok) {
+      const txt = await res.text();
+      setStatus("feil");
+      sendBtn.disabled = false;
+      stopBtn.disabled = true;
+      throw new Error(txt || ("HTTP " + res.status));
+    }
+
+    setStatus("streamer…");
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder("utf-8");
+
+    let buffer = "";
+    let currentEvent = null;
+    let dataLines = [];
+
+    function flushEvent() {
+      if (!dataLines.length) return;
+      const data = dataLines.join("\n");
+      const ev = currentEvent || "message";
+
+      logDebug(`event=${ev} bytes=${data.length}`);
+
+      if (ev === "citations") {
+        try {
+          const citations = JSON.parse(data);
+          renderCitations(citations);
+        } catch (e) {
+          logDebug("citations parse error: " + e);
+        }
+      } else if (ev === "delta") {
+        try {
+          const obj = JSON.parse(data);
+          if (obj && typeof obj.delta === "string") {
+            answerEl.textContent += obj.delta;
+          }
+        } catch (e) {
+          // fallback if server ever sends raw text
+          answerEl.textContent += data;
+        }
+      } else if (ev === "done") {
+        setStatus("ferdig");
+        sendBtn.disabled = false;
+        stopBtn.disabled = true;
+      } else if (ev === "error") {
+  debugLog("SSE error: " + data);
+  try {
+    const obj = JSON.parse(data);
+    debugLog("SSE error parsed: " + JSON.stringify(obj, null, 2));
+    // valgfritt: vis på skjermen også
+    appendAssistantMessage("Feil: " + (obj.message || data));
+  } catch (e) {
+    appendAssistantMessage("Feil: " + data);
+  }
+}
+      currentEvent = null;
+      dataLines = [];
+    }
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      let idx;
+      while ((idx = buffer.indexOf("\n")) !== -1) {
+        const line = buffer.slice(0, idx);
+        buffer = buffer.slice(idx + 1);
+        const trimmed = line.replace(/\r$/, "");
+
+        if (trimmed === "") {
+          flushEvent();
+          continue;
+        }
+        if (trimmed.startsWith("event:")) {
+          currentEvent = trimmed.slice(6).trim();
+          continue;
+        }
+        if (trimmed.startsWith("data:")) {
+          dataLines.push(trimmed.slice(5).trim());
+          continue;
+        }
+      }
+    }
+
+    flushEvent();
+
+    if (stopBtn.disabled === false) {
+      setStatus("ferdig");
+      sendBtn.disabled = false;
+      stopBtn.disabled = true;
+    }
+  }
+
+  sendBtn.addEventListener("click", async () => {
+    try {
+      await sendStreaming();
+    } catch (e) {
+      answerEl.textContent = "Feil: " + (e?.message || e);
+      setStatus("feil");
+      sendBtn.disabled = false;
+      stopBtn.disabled = true;
+    }
+  });
+
+  stopBtn.addEventListener("click", () => {
+    if (aborter) aborter.abort();
+    aborter = null;
+    setStatus("stoppet");
+    sendBtn.disabled = false;
+    stopBtn.disabled = true;
+  });
+
+  // ctrl/cmd + enter to send
+  q.addEventListener("keydown", (ev) => {
+    if ((ev.ctrlKey || ev.metaKey) && ev.key === "Enter") {
+      sendBtn.click();
+    }
+  });
+  
+})();
+
+function debugLog(msg) {
+  const el = document.getElementById("debug");
+  if (el) {
+    el.textContent += msg + "\n";
+  }
+  console.log(msg);
+}
+</script>
+</script>
+</body>
+</html>

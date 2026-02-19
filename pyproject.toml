@@ -1,0 +1,27 @@
+[project]
+name = "rag-service"
+version = "0.1.0"
+description = "RAG service for innovation leadership corpus (FastAPI + pgvector)."
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.111.0",
+  "uvicorn[standard]>=0.30.0",
+  "pydantic>=2.7.0",
+  "pydantic-settings>=2.3.0",
+  "sqlalchemy>=2.0.30",
+  "psycopg[binary]>=3.2.1",
+  "python-dotenv>=1.0.1",
+  "numpy>=1.26.0",
+  "rank-bm25>=0.2.2",
+  "requests>=2.32.0",
+]
+
+[project.optional-dependencies]
+html = ["beautifulsoup4>=4.12.0", "lxml>=5.2.0"]
+pdf = ["pypdf>=4.2.0", "cryptography>=3.1"]
+docx = ["python-docx>=1.1.2"]
+emb = ["sentence-transformers>=3.0.0", "torch>=2.3.0"]
+dev = ["pytest>=8.2.0", "ruff>=0.5.0"]
+
+[tool.ruff]
+line-length = 100
