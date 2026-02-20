@@ -1,27 +1,49 @@
 from __future__ import annotations
-import argparse
-from pathlib import Path
-import shutil
-from app.rag.index.indexer import ingest_file
 
-def _compute_dest_dirs(input_path: Path) -> tuple[Path, Path, Path]:
+import argparse
+import shutil
+from pathlib import Path
+
+from app.rag.index.indexer import ingest_file
+from app.settings import settings
+
+SUPPORTED_EXTENSIONS = ["*.md", "*.markdown", "*.txt", "*.html", "*.htm", "*.pdf", "*.docx"]
+
+
+def _is_within(path: Path, root: Path) -> bool:
+    try:
+        path.relative_to(root)
+        return True
+    except ValueError:
+        return False
+
+
+def _compute_dest_dirs(input_path: Path, ingest_root: Path | None) -> tuple[Path, Path, Path]:
     """Return (root_dir, done_dir, failed_dir).
 
-    If --path points to a directory named 'papers', we create siblings:
-      ../papers_done and ../papers_failed
+    Preferred layout is under ingest root:
+      <ingest_root>/done/<relative-input-dir>
+      <ingest_root>/failed/<relative-input-dir>
 
-    Generally: <path>_done and <path>_failed next to <path>.
+    Fallback (if input is outside ingest_root):
+      <input-dir>/done
+      <input-dir>/failed
     """
     if input_path.is_dir():
         root_dir = input_path
-        name = input_path.name
     else:
         root_dir = input_path.parent
-        name = root_dir.name
 
-    done_dir = root_dir.parent / f"{name}_done"
-    failed_dir = root_dir.parent / f"{name}_failed"
+    if ingest_root is not None and _is_within(root_dir, ingest_root):
+        rel = root_dir.relative_to(ingest_root)
+        done_dir = ingest_root / "done" / rel
+        failed_dir = ingest_root / "failed" / rel
+    else:
+        done_dir = root_dir / "done"
+        failed_dir = root_dir / "failed"
+
     return root_dir, done_dir, failed_dir
+
 
 def _move_preserve_tree(src: Path, root_dir: Path, dest_root: Path) -> Path:
     try:
@@ -32,23 +54,42 @@ def _move_preserve_tree(src: Path, root_dir: Path, dest_root: Path) -> Path:
     dst.parent.mkdir(parents=True, exist_ok=True)
     return Path(shutil.move(str(src), str(dst)))
 
-def ingest_path(path: str, source_type: str = "unknown", author: str | None = None, year: int | None = None) -> None:
-    p = Path(path)
+
+def _collect_files(path: Path, skip_roots: list[Path]) -> list[Path]:
+    if not path.is_dir():
+        return [path]
+
+    files: list[Path] = []
+    for ext in SUPPORTED_EXTENSIONS:
+        files.extend(path.rglob(ext))
+
+    unique_files = sorted(set(files))
+    return [f for f in unique_files if not any(_is_within(f, root) for root in skip_roots)]
+
+
+def ingest_path(
+    path: str,
+    source_type: str = "unknown",
+    author: str | None = None,
+    year: int | None = None,
+    ingest_root: str | None = None,
+) -> None:
+    p = Path(path).expanduser()
     if not p.exists():
         raise SystemExit(f"Path not found: {p}")
 
-    root_dir, done_dir, failed_dir = _compute_dest_dirs(p)
+    configured_root = ingest_root or settings.ingest_root
+    ingest_root_path = Path(configured_root).expanduser().resolve(strict=False) if configured_root else None
+
+    root_dir, done_dir, failed_dir = _compute_dest_dirs(p, ingest_root_path)
     done_dir.mkdir(parents=True, exist_ok=True)
     failed_dir.mkdir(parents=True, exist_ok=True)
 
-    if p.is_dir():
-        files: list[Path] = []
-        for ext in ["*.md","*.markdown","*.txt","*.html","*.htm","*.pdf","*.docx"]:
-            files.extend(p.rglob(ext))
-        files = sorted(set(files))
-    else:
-        files = [p]
+    skip_roots: list[Path] = []
+    if p.is_dir() and ingest_root_path is not None:
+        skip_roots = [ingest_root_path / "done", ingest_root_path / "failed"]
 
+    files = _collect_files(p, skip_roots)
     if not files:
         raise SystemExit("No files found to ingest.")
 
@@ -65,14 +106,23 @@ def ingest_path(path: str, source_type: str = "unknown", author: str | None = No
                 print(f"FAILED ingest {f}: {e} (also failed to move file: {move_err})")
             continue
 
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--path", required=True)
     ap.add_argument("--source-type", default="unknown")
     ap.add_argument("--author", default=None)
     ap.add_argument("--year", type=int, default=None)
+    ap.add_argument("--ingest-root", default=None)
     args = ap.parse_args()
-    ingest_path(args.path, source_type=args.source_type, author=args.author, year=args.year)
+    ingest_path(
+        args.path,
+        source_type=args.source_type,
+        author=args.author,
+        year=args.year,
+        ingest_root=args.ingest_root,
+    )
+
 
 if __name__ == "__main__":
     main()

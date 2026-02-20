@@ -149,6 +149,9 @@ curl -X POST http://localhost:8000/v1/admin/ingest \
 
 Merk:
 - `path` må ligge under `INGEST_ROOT` (default `/data/uploads`).
+- Ferdig prosesserte filer flyttes til `uploads/done/...`.
+- Filer som feiler ingest flyttes til `uploads/failed/...`.
+- `done/` og `failed/` opprettes automatisk hvis de mangler.
 - Admin-endepunkter er deaktivert hvis `ADMIN_API_KEY` ikke er satt.
 
 ## API-endepunkter

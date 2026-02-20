@@ -81,6 +81,9 @@ curl -X POST http://localhost:8000/v1/admin/ingest \
 Viktig:
 - `path` må være under `INGEST_ROOT`.
 - `path` kan være relativ (f.eks. `team_docs`) eller absolutt under `/data/uploads`.
+- Filer flyttes automatisk til `uploads/done/...` ved suksess.
+- Filer flyttes automatisk til `uploads/failed/...` ved feil.
+- `done/` og `failed/` opprettes automatisk hvis de mangler.
 
 ## 7. Gi andre tilgang til chat
 
