@@ -141,14 +141,16 @@ curl http://localhost:8000/health
 Docker-image for API bygger fra `docker/Dockerfile` og installerer disse extras:
 
 ```bash
-pip install -e '.[emb,pdf,docx,html]'
+pip install -e '.[pdf,docx,html]'
+pip install --index-url https://download.pytorch.org/whl/cpu torch==2.10.0
+pip install sentence-transformers>=3.0.0
 ```
 
 Det betyr at image inkluderer:
-- embeddings/reranking (`emb`)
 - PDF-loader inkl. AES-støtte via `cryptography` (`pdf`)
 - DOCX-loader (`docx`)
 - HTML-loader (`html`)
+- embeddings via `sentence-transformers` + CPU-`torch`
 
 Hvis du legger til nye filtyper eller nye ingest-avhengigheter:
 1. legg pakken i riktig gruppe under `[project.optional-dependencies]` i `pyproject.toml`
@@ -159,7 +161,7 @@ Verifiser avhengigheter i container:
 
 ```bash
 docker compose -f docker/docker-compose.yml exec api \
-  python -c "import pypdf, docx, bs4, lxml, cryptography; print('ok')"
+  python -c "import pypdf, docx, bs4, lxml, cryptography, torch, sentence_transformers; print('ok')"
 ```
 
 ## Ingest via opplastingsmappe i Docker

@@ -12,6 +12,8 @@ Denne mappen inneholder driftsnotater og arbeidsdokumenter.
 - `DEPLOY_VPS_MULTI_RAG.md`: VPS-oppsett for flere domene-RAG-er + scaffold-tilgang.
 - `VPS_BRUKERE_OG_TILGANG.md`: anbefalt bruker-/gruppeoppsett og tilgangsmodell på VPS.
 - `VPS_DOCKER_SETUP.md`: Docker Engine + Compose-oppsett på Hetzner VPS.
+- `VPS_NGINX_IP_DEPLOY.md`: Nginx-oppsett med IP-basert HTTPS (self-signed) og deploystatus.
+- `VPS_NGINX_DOMENE_DEPLOY.md`: Nginx-oppsett med domenebasert routing og Let's Encrypt.
 - `01_Ops_Oppsummering.md`: historisk oppsummering av feil/løsninger under utvikling.
 - `02_Kjor_Alt.md`: steg-for-steg lokal kjøring.
 - `03_README_Snutt.md`: kort oppstartssnutt.
