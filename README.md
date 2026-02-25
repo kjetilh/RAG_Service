@@ -136,6 +136,32 @@ docker compose -f docker/docker-compose.yml up -d --build
 curl http://localhost:8000/health
 ```
 
+### Ingest-avhengigheter i Docker (viktig)
+
+Docker-image for API bygger fra `docker/Dockerfile` og installerer disse extras:
+
+```bash
+pip install -e '.[emb,pdf,docx,html]'
+```
+
+Det betyr at image inkluderer:
+- embeddings/reranking (`emb`)
+- PDF-loader inkl. AES-støtte via `cryptography` (`pdf`)
+- DOCX-loader (`docx`)
+- HTML-loader (`html`)
+
+Hvis du legger til nye filtyper eller nye ingest-avhengigheter:
+1. legg pakken i riktig gruppe under `[project.optional-dependencies]` i `pyproject.toml`
+2. sørg for at gruppen er med i extras-listen i `docker/Dockerfile`
+3. rebuild image (ikke bare restart container)
+
+Verifiser avhengigheter i container:
+
+```bash
+docker compose -f docker/docker-compose.yml exec api \
+  python -c "import pypdf, docx, bs4, lxml, cryptography; print('ok')"
+```
+
 ## Ingest via opplastingsmappe i Docker
 
 API-containeren får tilgang til `uploads/` i repoet via volume-mapping til `/data/uploads`.

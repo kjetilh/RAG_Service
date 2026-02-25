@@ -51,6 +51,35 @@ docker compose \
   up -d --build
 ```
 
+Ved endring i Python-avhengigheter (f.eks. ingest for PDF/DOCX):
+
+```bash
+docker compose \
+  --env-file docker/.env.vps.multi \
+  -f docker/docker-compose.vps.yml \
+  build --no-cache rag_innovasjon_api rag_dimy_api
+
+docker compose \
+  --env-file docker/.env.vps.multi \
+  -f docker/docker-compose.vps.yml \
+  up -d
+```
+
+API-image skal installere extras:
+
+```bash
+pip install -e '.[emb,pdf,docx,html]'
+```
+
+Dette dekker også AES-krypterte PDF-filer via `cryptography` i `pdf`-gruppen.
+
+Verifiser i begge API-containere:
+
+```bash
+docker exec docker-rag_innovasjon_api-1 python -c "import pypdf, docx, bs4, lxml, cryptography; print('innovasjon ok')"
+docker exec docker-rag_dimy_api-1 python -c "import pypdf, docx, bs4, lxml, cryptography; print('dimy ok')"
+```
+
 Sjekk tjenester:
 
 ```bash
