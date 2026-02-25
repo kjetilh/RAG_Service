@@ -10,7 +10,7 @@ COPY app /app/app
 COPY scripts /app/scripts
 COPY prompts /app/prompts
 
-RUN pip install --no-cache-dir -U pip && pip install --no-cache-dir -e .
+RUN pip install --no-cache-dir -U pip && pip install --no-cache-dir -e '.[emb]'
 
 EXPOSE 8000
 
