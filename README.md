@@ -29,9 +29,11 @@ Dette repoet er ment som:
 
 - App Dockerfile: `docker/Dockerfile`
 - Compose-oppsett (API + DB): `docker/docker-compose.yml`
+- Compose-oppsett (multi-RAG på VPS): `docker/docker-compose.vps.yml`
 - Miljøvariabler: `.env.example`
 - SQL schema: `app/rag/index/schema.sql`
 - VPS-guide: `docs/DEPLOY_VPS.md`
+- VPS-guide (multi-RAG + scaffold): `docs/DEPLOY_VPS_MULTI_RAG.md`
 
 ## PostgreSQL Dockerfile
 
@@ -162,12 +164,16 @@ Merk:
 - `POST /v1/admin/rebuild` (krever `X-API-Key` + `{"confirm": true}`)
 - `POST /v1/admin/ingest` (krever `X-API-Key`)
 
+`/v1/chat` og `/v1/chat/stream` støtter valgfritt request-felt:
+- `model_profile` (streng): velger modellprofil fra `LLM_PROFILES_JSON`.
+
 ## Miljøvariabler du oftest justerer
 
 - `DATABASE_URL`
 - `LLM_BASE_URL`
 - `LLM_API_KEY`
 - `LLM_MODEL`
+- `LLM_PROFILES_JSON`
 - `ADMIN_API_KEY`
 - `INGEST_ROOT`
 - `QUERY_REWRITE_ENABLED`

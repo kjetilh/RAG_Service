@@ -23,5 +23,12 @@ docx = ["python-docx>=1.1.2"]
 emb = ["sentence-transformers>=3.0.0", "torch>=2.3.0"]
 dev = ["pytest>=8.2.0", "ruff>=0.5.0"]
 
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*", "scripts*"]
+
 [tool.ruff]
 line-length = 100

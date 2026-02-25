@@ -24,6 +24,82 @@ class LLMProvider:
         raise NotImplementedError
 
 
+class ModelProfileError(ValueError):
+    """Raised when a requested model profile is missing or invalid."""
+
+
+@dataclass
+class LLMRuntimeConfig:
+    provider: str
+    base_url: str
+    api_key: str
+    model: str
+
+
+def _safe_get_str(payload: Dict[str, Any], key: str) -> Optional[str]:
+    val = payload.get(key)
+    if val is None:
+        return None
+    return str(val).strip()
+
+
+def _default_runtime_config() -> LLMRuntimeConfig:
+    return LLMRuntimeConfig(
+        provider=settings.llm_provider,
+        base_url=settings.llm_base_url,
+        api_key=settings.llm_api_key,
+        model=settings.llm_model,
+    )
+
+
+def _profiles_from_settings() -> Dict[str, Dict[str, Any]]:
+    raw = (settings.llm_profiles_json or "").strip()
+    if not raw:
+        return {}
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as e:
+        raise ModelProfileError(f"LLM_PROFILES_JSON is invalid JSON: {e.msg}") from e
+
+    if not isinstance(payload, dict):
+        raise ModelProfileError("LLM_PROFILES_JSON must be a JSON object keyed by profile name.")
+
+    normalized: Dict[str, Dict[str, Any]] = {}
+    for name, cfg in payload.items():
+        if not isinstance(name, str) or not name.strip():
+            raise ModelProfileError("LLM_PROFILES_JSON contains an empty profile name.")
+        if not isinstance(cfg, dict):
+            raise ModelProfileError(f"Profile '{name}' must be a JSON object.")
+        normalized[name.strip()] = cfg
+    return normalized
+
+
+def _resolve_runtime_config(model_profile: str | None = None) -> LLMRuntimeConfig:
+    default = _default_runtime_config()
+    if not model_profile:
+        return default
+
+    profiles = _profiles_from_settings()
+    requested = model_profile.strip()
+    if requested not in profiles:
+        known = ", ".join(sorted(profiles.keys())) if profiles else "<none configured>"
+        raise ModelProfileError(f"Unknown model_profile '{requested}'. Known profiles: {known}.")
+
+    profile_cfg = profiles[requested]
+    provider = _safe_get_str(profile_cfg, "provider") or default.provider
+    base_url = _safe_get_str(profile_cfg, "base_url") or default.base_url
+    model = _safe_get_str(profile_cfg, "model") or default.model
+
+    api_key = _safe_get_str(profile_cfg, "api_key") or ""
+    api_key_env = _safe_get_str(profile_cfg, "api_key_env")
+    if not api_key and api_key_env:
+        api_key = os.getenv(api_key_env, "").strip()
+    if not api_key:
+        api_key = default.api_key
+
+    return LLMRuntimeConfig(provider=provider, base_url=base_url, api_key=api_key, model=model)
+
+
 class OpenAICompatibleProvider(LLMProvider):
     """Minimal OpenAI-compatible /chat/completions client with robust 429 handling."""
 
@@ -78,7 +154,8 @@ class OpenAICompatibleProvider(LLMProvider):
 
                     # Log once per attempt (lightweight; avoids dependency on logging config)
                     print(
-                        f"[LLM] HTTP {r.status_code} on attempt {attempt}/{max_attempts}. "                        f"Sleeping {sleep_s:.2f}s. Response: {err_text[:400] if err_text else '<no body>'}"
+                        f"[LLM] HTTP {r.status_code} on attempt {attempt}/{max_attempts}. "
+                        f"Sleeping {sleep_s:.2f}s. Response: {err_text[:400] if err_text else '<no body>'}"
                     )
 
                     time.sleep(sleep_s)
@@ -121,10 +198,15 @@ class OpenAICompatibleProvider(LLMProvider):
         return data["choices"][0]["message"]["content"]
 
 
-def default_provider() -> LLMProvider:
-    if settings.llm_provider == "openai_compat":
-        return OpenAICompatibleProvider(settings.llm_base_url, settings.llm_api_key, settings.llm_model)
-    raise RuntimeError(f"Unknown LLM_PROVIDER: {settings.llm_provider}")
+def default_provider(model_profile: str | None = None) -> LLMProvider:
+    cfg = _resolve_runtime_config(model_profile=model_profile)
+    if cfg.provider == "openai_compat":
+        return OpenAICompatibleProvider(cfg.base_url, cfg.api_key, cfg.model)
+    raise RuntimeError(f"Unknown LLM provider: {cfg.provider}")
+
+
+def validate_model_profile(model_profile: str | None = None) -> None:
+    _resolve_runtime_config(model_profile=model_profile)
 
 def _log_prompt(model: str, messages: list[dict]):
     log_dir = os.getenv("LLM_PROMPT_LOG_DIR", "logs")

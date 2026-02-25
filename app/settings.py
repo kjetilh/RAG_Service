@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     llm_base_url: str = "https://api.openai.com/v1"
     llm_api_key: str = ""
     llm_model: str = "gpt-4o-mini"
+    llm_profiles_json: str = ""
 
     top_k_vector: int = 50
     top_k_lexical: int = 50

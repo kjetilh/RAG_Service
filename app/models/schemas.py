@@ -6,6 +6,7 @@ class ChatRequest(BaseModel):
     conversation_id: Optional[str] = None
     filters: Optional[Dict[str, Any]] = None
     top_k: Optional[int] = None
+    model_profile: Optional[str] = Field(default=None, min_length=1, max_length=64)
 
 class Citation(BaseModel):
     doc_id: str

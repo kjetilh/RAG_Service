@@ -1,5 +1,6 @@
 .DS_Store
 .env
+docker/.env.vps.multi
 .venv/
 __pycache__/
 *.py[cod]

@@ -2,6 +2,9 @@
 
 Denne guiden setter opp tjenesten slik at andre kan teste chat-endepunktene, mens admin-endepunkter er beskyttet med API-nøkkel.
 
+For oppsett med flere domene-RAG-er på samme VPS, bruk:
+- `docs/DEPLOY_VPS_MULTI_RAG.md`
+
 ## 1. Forutsetninger på VPS
 
 - Docker Engine + Compose plugin

@@ -31,12 +31,13 @@ def answer_question(
     conversation_id: Optional[str] = None,
     filters: Optional[Dict[str, Any]] = None,
     top_k: Optional[int] = None,
+    model_profile: Optional[str] = None,
 ) -> ChatResponse:
     filters = filters or {}
     internal_filters = _map_filters(filters)
 
     # Rewrite (optional)
-    query = rewrite_query_if_enabled(message)
+    query = rewrite_query_if_enabled(message, model_profile=model_profile)
 
     # Embed query
     embedder = default_embedder()
@@ -61,7 +62,7 @@ def answer_question(
 
     # Compose answer with concurrency throttle
     with _LLM_SEM:
-        answer = compose_answer(message, packed)
+        answer = compose_answer(message, packed, model_profile=model_profile)
 
     # Grounding gate (optional but recommended)
     citations = packed.citations
@@ -75,6 +76,7 @@ def answer_question_stream(
     conversation_id: Optional[str] = None,
     filters: Optional[Dict[str, Any]] = None,
     top_k: Optional[int] = None,
+    model_profile: Optional[str] = None,
 ) -> Iterable[bytes]:
     """SSE stream.
     Events:
@@ -84,7 +86,7 @@ def answer_question_stream(
       - done
     """
     try:
-        resp = answer_question(message, conversation_id, filters or {}, top_k)
+        resp = answer_question(message, conversation_id, filters or {}, top_k, model_profile=model_profile)
 
         # Send citations first
         citations_payload = json.dumps([c.model_dump() for c in resp.citations], ensure_ascii=False)

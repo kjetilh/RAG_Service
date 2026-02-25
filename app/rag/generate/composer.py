@@ -13,14 +13,14 @@ def _format_context(context_chunks: List[RetrievedChunk]) -> str:
         blocks.append(f"[{i}] TITLE: {c.title} | DOC: {c.doc_id} | CHUNK: {c.chunk_id}\n{c.content}")
     return "\n\n".join(blocks)
 
-def rewrite_query_if_enabled(original_query: str) -> str:
+def rewrite_query_if_enabled(original_query: str, model_profile: str | None = None) -> str:
     """Optional query rewrite using LLM to improve retrieval.
     If disabled or failure, returns original.
     """
     if not bool(settings.query_rewrite_enabled):
         return original_query
 
-    provider = default_provider()
+    provider = default_provider(model_profile=model_profile)
     system = (
         "Du er en hjelpsom assistent som omskriver søkespørsmål for bedre dokumentgjenfinning. "
         "Returner KUN den omskrevne spørringen, uten forklaring."
@@ -40,10 +40,10 @@ def rewrite_query_if_enabled(original_query: str) -> str:
         pass
     return original_query
 
-def compose_answer(question: str, context_chunks: Any) -> str:
+def compose_answer(question: str, context_chunks: Any, model_profile: str | None = None) -> str:
     persona = load_persona()
     template = load_answer_template()
-    provider = default_provider()
+    provider = default_provider(model_profile=model_profile)
 
     # Support both:
     # - old style: context_chunks is List[RetrievedChunk]
