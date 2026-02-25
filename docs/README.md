@@ -10,6 +10,8 @@ Denne mappen inneholder driftsnotater og arbeidsdokumenter.
 
 - `DEPLOY_VPS.md`: konkret VPS-oppsett for testing med flere brukere.
 - `DEPLOY_VPS_MULTI_RAG.md`: VPS-oppsett for flere domene-RAG-er + scaffold-tilgang.
+- `VPS_BRUKERE_OG_TILGANG.md`: anbefalt bruker-/gruppeoppsett og tilgangsmodell på VPS.
+- `VPS_DOCKER_SETUP.md`: Docker Engine + Compose-oppsett på Hetzner VPS.
 - `01_Ops_Oppsummering.md`: historisk oppsummering av feil/løsninger under utvikling.
 - `02_Kjor_Alt.md`: steg-for-steg lokal kjøring.
 - `03_README_Snutt.md`: kort oppstartssnutt.
