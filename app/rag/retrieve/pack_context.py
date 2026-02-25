@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
+from urllib.parse import quote
 
 from app.models.schemas import Citation
 
@@ -47,6 +48,7 @@ def pack_context(candidates, top_k: int, max_chunks_per_doc: int = 4) -> PackedC
             chunk_id=chunk_id,
             score=float(getattr(c, "score", 0.0)),
             excerpt=content[:800],
+            download_url=f"/v1/documents/{quote(doc_id, safe='')}/download",
             year=getattr(c, "year", None),
             author=getattr(c, "author", None),
             source_type=getattr(c, "source_type", None),

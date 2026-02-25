@@ -189,6 +189,7 @@ Merk:
 - `GET /health`
 - `POST /v1/chat`
 - `POST /v1/chat/stream`
+- `GET /v1/documents/{doc_id}/download`
 - `POST /v1/admin/rebuild` (krever `X-API-Key` + `{"confirm": true}`)
 - `POST /v1/admin/ingest` (krever `X-API-Key`)
 

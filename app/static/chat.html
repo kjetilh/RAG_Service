@@ -121,9 +121,12 @@
       ].filter(Boolean).join(" · ");
 
       const score = (typeof c.score === "number") ? c.score.toFixed(3) : "";
+      const download = c.download_url
+        ? ` · <a href="${escapeHtml(c.download_url)}" target="_blank" rel="noopener">last ned</a>`
+        : "";
 
       li.innerHTML = `<div><strong>[${idx+1}]</strong> ${escapeHtml(title)}</div>
-                      <div class="muted mono">${escapeHtml(meta)}${meta && score ? " · " : ""}${score ? "score=" + score : ""}</div>
+                      <div class="muted mono">${escapeHtml(meta)}${meta && score ? " · " : ""}${score ? "score=" + score : ""}${download}</div>
                       <div class="mono" style="margin-top:4px;">${escapeHtml(c.excerpt || "").slice(0, 500)}${(c.excerpt && c.excerpt.length>500) ? "…" : ""}</div>`;
       citationsEl.appendChild(li);
     });

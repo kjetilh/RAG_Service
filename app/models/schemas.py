@@ -14,6 +14,7 @@ class Citation(BaseModel):
     chunk_id: str
     score: float
     excerpt: str
+    download_url: Optional[str] = None
     year: Optional[int] = None
     author: Optional[str] = None
     source_type: Optional[str] = None
