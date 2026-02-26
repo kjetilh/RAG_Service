@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     llm_api_key: str = ""
     llm_model: str = "gpt-4o-mini"
     llm_profiles_json: str = ""
+    system_persona_path: str = ""
+    answer_template_path: str = ""
 
     top_k_vector: int = 50
     top_k_lexical: int = 50

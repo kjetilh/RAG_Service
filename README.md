@@ -203,12 +203,16 @@ Merk:
 - `LLM_API_KEY`
 - `LLM_MODEL`
 - `LLM_PROFILES_JSON`
+- `SYSTEM_PERSONA_PATH`
+- `ANSWER_TEMPLATE_PATH`
 - `ADMIN_API_KEY`
 - `INGEST_ROOT`
 - `QUERY_REWRITE_ENABLED`
 - `RERANKER_ENABLED`
 - `GROUNDING_MIN_CITATIONS`
 - `STREAM_CHUNK_CHARS`
+
+`SYSTEM_PERSONA_PATH` og `ANSWER_TEMPLATE_PATH` kan brukes til å velge ulike instruksjoner per tjeneste (f.eks. innovasjon vs dokumentasjon) uten kodeendring.
 
 ## Forslag for team-RAG videre
 

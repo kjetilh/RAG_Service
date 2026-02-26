@@ -43,6 +43,8 @@ services:
       LLM_API_KEY: ${RAG_INNOVASJON_LLM_API_KEY:-}
       LLM_MODEL: ${RAG_INNOVASJON_LLM_MODEL:-gpt-4o-mini}
       LLM_PROFILES_JSON: ${RAG_INNOVASJON_LLM_PROFILES_JSON:-}
+      SYSTEM_PERSONA_PATH: ${RAG_INNOVASJON_SYSTEM_PERSONA_PATH:-/app/prompts/system_persona.md}
+      ANSWER_TEMPLATE_PATH: ${RAG_INNOVASJON_ANSWER_TEMPLATE_PATH:-/app/prompts/answer_template.md}
       ADMIN_API_KEY: ${RAG_INNOVASJON_ADMIN_API_KEY:-}
       INGEST_ROOT: /data/uploads
     depends_on:
@@ -89,6 +91,8 @@ services:
       LLM_API_KEY: ${RAG_DIMY_LLM_API_KEY:-}
       LLM_MODEL: ${RAG_DIMY_LLM_MODEL:-gpt-4o-mini}
       LLM_PROFILES_JSON: ${RAG_DIMY_LLM_PROFILES_JSON:-}
+      SYSTEM_PERSONA_PATH: ${RAG_DIMY_SYSTEM_PERSONA_PATH:-/app/prompts/system_persona_dimy.md}
+      ANSWER_TEMPLATE_PATH: ${RAG_DIMY_ANSWER_TEMPLATE_PATH:-/app/prompts/answer_template_dimy.md}
       ADMIN_API_KEY: ${RAG_DIMY_ADMIN_API_KEY:-}
       INGEST_ROOT: /data/uploads
     depends_on:

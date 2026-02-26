@@ -30,6 +30,7 @@ Rediger `docker/.env.vps.multi`:
 - sett unike DB-passord per domene
 - sett unike admin-nøkler per domene
 - sett LLM nøkler/modeller per domene
+- sett promptfiler per domene ved behov
 - verifiser upload-stier
 
 Generer nøkler:
@@ -205,6 +206,20 @@ RAG_INNOVASJON_LLM_PROFILES_JSON={"openai-mini":{"provider":"openai_compat","bas
 
 Hvis `model_profile` mangler, brukes default `LLM_*`-verdier for den tjenesten.
 
+### 7.1 Promptstyring per tjeneste
+
+Hver API kan bruke egne promptfiler:
+
+- Innovasjon: `RAG_INNOVASJON_SYSTEM_PERSONA_PATH` og `RAG_INNOVASJON_ANSWER_TEMPLATE_PATH`
+- Dokumentasjon/DiMy: `RAG_DIMY_SYSTEM_PERSONA_PATH` og `RAG_DIMY_ANSWER_TEMPLATE_PATH`
+
+Standard i compose:
+
+- `rag_innovasjon_api` -> `/app/prompts/system_persona.md` + `/app/prompts/answer_template.md`
+- `rag_dimy_api` -> `/app/prompts/system_persona_dimy.md` + `/app/prompts/answer_template_dimy.md`
+
+Dermed kan prompt byttes uten kodeendring, kun med env-fil + restart.
+
 ## 8) Eksponering via reverse proxy
 
 Hold API-portene bundet til `127.0.0.1` (som i compose-filen). Eksponer offentlig via Nginx/Caddy med HTTPS.
@@ -233,3 +248,13 @@ Logs:
 ```bash
 docker compose --env-file docker/.env.vps.multi -f docker/docker-compose.vps.yml logs -f rag_innovasjon_api rag_dimy_api
 ```
+
+## 10) Plan for admin-celle-styrt promptendring (ikke implementert enda)
+
+Forslag til robust vei videre:
+
+1. Legg til metadata-tabell i hver RAG-DB for aktive promptvalg (`system_persona`, `answer_template`, `version`, `updated_by`, `updated_at`).
+2. Lag admin-endepunkt for validering og oppdatering av promptvalg, beskyttet av `ADMIN_API_KEY`.
+3. La admin-cellen skrive til disse endepunktene, ikke direkte i filer/container.
+4. Behold env-verdier som fallback ved oppstart hvis DB mangler konfig.
+5. Logg alle promptendringer (audit) og legg inn enkel rollback til forrige versjon.
