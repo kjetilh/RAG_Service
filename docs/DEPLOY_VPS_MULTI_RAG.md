@@ -249,12 +249,40 @@ Logs:
 docker compose --env-file docker/.env.vps.multi -f docker/docker-compose.vps.yml logs -f rag_innovasjon_api rag_dimy_api
 ```
 
-## 10) Plan for admin-celle-styrt promptendring (ikke implementert enda)
+## 10) Admin-celle-styrt promptendring (implementert)
 
-Forslag til robust vei videre:
+Promptkonfig lagres nå per RAG-database i tabellen `prompt_runtime_config`.
 
-1. Legg til metadata-tabell i hver RAG-DB for aktive promptvalg (`system_persona`, `answer_template`, `version`, `updated_by`, `updated_at`).
-2. Lag admin-endepunkt for validering og oppdatering av promptvalg, beskyttet av `ADMIN_API_KEY`.
-3. La admin-cellen skrive til disse endepunktene, ikke direkte i filer/container.
-4. Behold env-verdier som fallback ved oppstart hvis DB mangler konfig.
-5. Logg alle promptendringer (audit) og legg inn enkel rollback til forrige versjon.
+- `system_persona_path`
+- `answer_template_path`
+- `version`
+- `updated_by`
+- `change_note`
+- `updated_at`
+
+Endepunkter:
+
+- `GET /v1/admin/prompt-config`
+- `PUT /v1/admin/prompt-config`
+
+Begge krever `X-API-Key` (`ADMIN_API_KEY` for den aktuelle RAG-tjenesten).
+
+Eksempel oppdatering av dokumentasjons-RAG:
+
+```bash
+curl -X PUT http://127.0.0.1:8102/v1/admin/prompt-config \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: $RAG_DIMY_ADMIN_API_KEY" \
+  -d '{
+    "system_persona_path": "/app/prompts/system_persona_dimy.md",
+    "answer_template_path": "/app/prompts/answer_template_dimy.md",
+    "updated_by": "admin-cell",
+    "change_note": "Aktiverte DiMy dokumentasjonsprofil"
+  }'
+```
+
+Fallback-regler:
+
+1. DB-override brukes hvis satt.
+2. Ellers brukes env (`SYSTEM_PERSONA_PATH` / `ANSWER_TEMPLATE_PATH`).
+3. Ellers brukes default i repo (`prompts/system_persona.md`, `prompts/answer_template.md`).

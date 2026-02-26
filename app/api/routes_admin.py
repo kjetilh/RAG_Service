@@ -1,9 +1,18 @@
 from pathlib import Path
 import secrets
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel
+from sqlalchemy.exc import SQLAlchemyError
 
+from app.rag.generate.prompt_config_store import (
+    PromptRuntimeConfig,
+    get_runtime_config,
+    resolve_effective_paths,
+    resolve_prompt_path,
+    upsert_runtime_config,
+)
 from app.scripts_adapter import rebuild_index, ingest_folder
 from app.settings import settings
 
@@ -71,3 +80,136 @@ def admin_ingest(req: IngestRequest):
         year=req.year,
     )
     return {"ok": True}
+
+
+class PromptConfigResponse(BaseModel):
+    system_persona_path: str | None
+    answer_template_path: str | None
+    effective_system_persona_path: str
+    effective_answer_template_path: str
+    system_persona_source: str
+    answer_template_source: str
+    system_persona_resolved_path: str
+    answer_template_resolved_path: str
+    system_persona_bytes: int
+    answer_template_bytes: int
+    version: int
+    updated_by: str | None = None
+    change_note: str | None = None
+    updated_at: datetime | None = None
+
+
+class PromptConfigUpdateRequest(BaseModel):
+    system_persona_path: str | None = None
+    answer_template_path: str | None = None
+    updated_by: str | None = None
+    change_note: str | None = None
+
+
+def _normalize_optional_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    stripped = value.strip()
+    return stripped or None
+
+
+def _prompt_file_info(path_value: str, label: str) -> tuple[str, int]:
+    resolved = resolve_prompt_path(path_value).resolve(strict=False)
+    if not resolved.is_file():
+        raise HTTPException(status_code=400, detail=f"{label} not found: {resolved}")
+    size = resolved.stat().st_size
+    if size <= 0:
+        raise HTTPException(status_code=400, detail=f"{label} is empty: {resolved}")
+    return str(resolved), size
+
+
+def _build_prompt_config_response(runtime_cfg: PromptRuntimeConfig) -> PromptConfigResponse:
+    system_path, answer_path, system_source, answer_source = resolve_effective_paths(runtime_cfg)
+    system_resolved, system_bytes = _prompt_file_info(system_path, "system_persona_path")
+    answer_resolved, answer_bytes = _prompt_file_info(answer_path, "answer_template_path")
+    return PromptConfigResponse(
+        system_persona_path=runtime_cfg.system_persona_path,
+        answer_template_path=runtime_cfg.answer_template_path,
+        effective_system_persona_path=system_path,
+        effective_answer_template_path=answer_path,
+        system_persona_source=system_source,
+        answer_template_source=answer_source,
+        system_persona_resolved_path=system_resolved,
+        answer_template_resolved_path=answer_resolved,
+        system_persona_bytes=system_bytes,
+        answer_template_bytes=answer_bytes,
+        version=runtime_cfg.version,
+        updated_by=runtime_cfg.updated_by,
+        change_note=runtime_cfg.change_note,
+        updated_at=runtime_cfg.updated_at,
+    )
+
+
+@router.get(
+    "/v1/admin/prompt-config",
+    response_model=PromptConfigResponse,
+    dependencies=[Depends(_require_admin_api_key)],
+)
+def admin_get_prompt_config():
+    try:
+        cfg = get_runtime_config()
+        return _build_prompt_config_response(cfg)
+    except HTTPException:
+        raise
+    except SQLAlchemyError as e:
+        raise HTTPException(status_code=500, detail=f"Database error reading prompt config: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.put(
+    "/v1/admin/prompt-config",
+    response_model=PromptConfigResponse,
+    dependencies=[Depends(_require_admin_api_key)],
+)
+def admin_update_prompt_config(req: PromptConfigUpdateRequest):
+    provided_fields = req.model_fields_set
+    if "system_persona_path" not in provided_fields and "answer_template_path" not in provided_fields:
+        raise HTTPException(
+            status_code=400,
+            detail="Provide at least one of system_persona_path or answer_template_path.",
+        )
+
+    try:
+        current = get_runtime_config()
+        new_system_override = (
+            _normalize_optional_text(req.system_persona_path)
+            if "system_persona_path" in provided_fields
+            else current.system_persona_path
+        )
+        new_answer_override = (
+            _normalize_optional_text(req.answer_template_path)
+            if "answer_template_path" in provided_fields
+            else current.answer_template_path
+        )
+
+        proposed = PromptRuntimeConfig(
+            system_persona_path=new_system_override,
+            answer_template_path=new_answer_override,
+            version=current.version,
+            updated_by=current.updated_by,
+            change_note=current.change_note,
+            updated_at=current.updated_at,
+        )
+
+        # Validate proposed effective paths before persisting.
+        _build_prompt_config_response(proposed)
+
+        updated = upsert_runtime_config(
+            system_persona_path=new_system_override,
+            answer_template_path=new_answer_override,
+            updated_by=_normalize_optional_text(req.updated_by) or "admin-api",
+            change_note=_normalize_optional_text(req.change_note),
+        )
+        return _build_prompt_config_response(updated)
+    except HTTPException:
+        raise
+    except SQLAlchemyError as e:
+        raise HTTPException(status_code=500, detail=f"Database error writing prompt config: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

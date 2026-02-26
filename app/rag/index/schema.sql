@@ -36,3 +36,18 @@ ALTER TABLE documents ADD COLUMN IF NOT EXISTS language TEXT;
 ALTER TABLE documents ADD COLUMN IF NOT EXISTS identifiers JSONB;
 ALTER TABLE documents ADD COLUMN IF NOT EXISTS meta_sources JSONB;
 ALTER TABLE documents ADD COLUMN IF NOT EXISTS file_path TEXT;
+
+-- Runtime prompt config (singleton, migration-safe)
+CREATE TABLE IF NOT EXISTS prompt_runtime_config (
+  id SMALLINT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+  system_persona_path TEXT,
+  answer_template_path TEXT,
+  version INT NOT NULL DEFAULT 0,
+  updated_by TEXT,
+  change_note TEXT,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+INSERT INTO prompt_runtime_config (id)
+VALUES (1)
+ON CONFLICT (id) DO NOTHING;

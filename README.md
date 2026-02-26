@@ -192,9 +192,25 @@ Merk:
 - `GET /v1/documents/{doc_id}/download`
 - `POST /v1/admin/rebuild` (krever `X-API-Key` + `{"confirm": true}`)
 - `POST /v1/admin/ingest` (krever `X-API-Key`)
+- `GET /v1/admin/prompt-config` (krever `X-API-Key`)
+- `PUT /v1/admin/prompt-config` (krever `X-API-Key`)
 
 `/v1/chat` og `/v1/chat/stream` støtter valgfritt request-felt:
 - `model_profile` (streng): velger modellprofil fra `LLM_PROFILES_JSON`.
+
+Eksempel oppdatering av aktiv prompt-konfig:
+
+```bash
+curl -X PUT http://localhost:8000/v1/admin/prompt-config \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: <DIN_ADMIN_API_KEY>" \
+  -d '{
+    "system_persona_path": "/app/prompts/system_persona_dimy.md",
+    "answer_template_path": "/app/prompts/answer_template_dimy.md",
+    "updated_by": "admin-cell",
+    "change_note": "Settet DiMy dokumentasjonsprofil"
+  }'
+```
 
 ## Miljøvariabler du oftest justerer
 
