@@ -174,7 +174,7 @@ do
 done
 
 COPYFILE_DISABLE=1 tar -C "$SRC" -czf - . | \
-ssh -i ~/.ssh/id_ed25519_hetzner root@89.167.90.101 '
+ssh -i ~/.ssh/id_ed25519_hetzner ops@89.167.90.101 '
   set -e
   rm -rf /srv/ops/rag_service/uploads/dimy/cell_haven_docs
   mkdir -p /srv/ops/rag_service/uploads/dimy/cell_haven_docs

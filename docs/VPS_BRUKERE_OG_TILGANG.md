@@ -69,3 +69,12 @@ ssh -i ~/.ssh/id_ed25519_hetzner dimy@89.167.90.101
 - installer Docker Engine og Compose plugin
 - legg på fail2ban for SSH
 - bruk separate `.env`-filer per tjeneste med minst mulig secrets per bruker
+
+## 6) Operativ policy (gjeldende fra 2026-02-26)
+
+- daglig drift gjøres som `ops` (deploy, logs, docker compose, git pull)
+- `root` brukes kun som break-glass for oppgaver som krever systemnivå:
+  - pakkeinstallasjon
+  - endring i `/etc/*`
+  - systemd/SSH-hardening
+- repoet under `/srv/ops/rag_service` eies av `ops:ops` for å unngå nye root-eide filer i vanlig drift
