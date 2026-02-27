@@ -146,7 +146,32 @@ Anbefalt `source_type`-standard:
 - Innovasjon: `innovasjonsledelse`, `immovasjonsfag`
 - Dokumentasjon (`doc`): `haven_docs`, `cellprotocol_docs`
 
-### 6.1 Last opp CellProtocol/HAVEN-dokumenter fra lokal checkout
+### 6.1 Kontinuerlig synk (nye/endrede/slettede filer)
+
+Bruk `POST /v1/admin/sync` for kataloger som skal holdes løpende synkronisert.
+I motsetning til `ingest` flytter ikke `sync` filer til `done/failed`.
+`source_type` må settes når `delete_missing=true`.
+
+Eksempel (DiMy dokumentasjon):
+
+```bash
+curl -X POST http://127.0.0.1:8102/v1/admin/sync \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: $RAG_DIMY_ADMIN_API_KEY" \
+  -d '{
+    "path":"cell_haven_docs_live",
+    "source_type":"haven_docs",
+    "delete_missing":true,
+    "dry_run":false
+  }'
+```
+
+Anbefalt driftsmønster:
+
+- `uploads/dimy/cell_haven_docs_drop` for engangs-ingest (flyttes til `done/failed`)
+- `uploads/dimy/cell_haven_docs_live` for kontinuerlig synk (`/v1/admin/sync`)
+- bruk `dry_run=true` før første kjøring i ny mappe
+### 6.2 Last opp CellProtocol/HAVEN-dokumenter fra lokal checkout
 
 Eksempel (kjores lokalt, laster opp til VPS):
 

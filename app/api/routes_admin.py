@@ -13,7 +13,7 @@ from app.rag.generate.prompt_config_store import (
     resolve_prompt_path,
     upsert_runtime_config,
 )
-from app.scripts_adapter import rebuild_index, ingest_folder
+from app.scripts_adapter import rebuild_index, ingest_folder, sync_folder
 from app.settings import settings
 
 router = APIRouter()
@@ -80,6 +80,30 @@ def admin_ingest(req: IngestRequest):
         year=req.year,
     )
     return {"ok": True}
+
+
+class SyncRequest(BaseModel):
+    path: str
+    source_type: str | None = None
+    author: str | None = None
+    year: int | None = None
+    delete_missing: bool = True
+    dry_run: bool = False
+
+
+@router.post("/v1/admin/sync", dependencies=[Depends(_require_admin_api_key)])
+def admin_sync(req: SyncRequest):
+    if req.delete_missing and req.source_type is None:
+        raise HTTPException(status_code=400, detail="source_type must be set when delete_missing=true")
+    summary = sync_folder(
+        path=_validated_ingest_path(req.path),
+        source_type=req.source_type,
+        author=req.author,
+        year=req.year,
+        delete_missing=req.delete_missing,
+        dry_run=req.dry_run,
+    )
+    return {"ok": len(summary.get("errors", [])) == 0, "summary": summary}
 
 
 class PromptConfigResponse(BaseModel):

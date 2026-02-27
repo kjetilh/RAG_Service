@@ -184,6 +184,22 @@ Merk:
 - `done/` og `failed/` opprettes automatisk hvis de mangler.
 - Admin-endepunkter er deaktivert hvis `ADMIN_API_KEY` ikke er satt.
 
+For kontinuerlig oppdatering (nye/endrede/slettede filer) bruk `sync` i stedet for `ingest`.
+`sync` flytter ikke filer.
+For sikker sletting kreves `source_type` når `delete_missing=true`.
+
+```bash
+curl -X POST http://localhost:8000/v1/admin/sync \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: <DIN_ADMIN_API_KEY>" \
+  -d '{
+    "path":"team_docs_live",
+    "source_type":"haven_docs",
+    "delete_missing":true,
+    "dry_run":false
+  }'
+```
+
 ## API-endepunkter
 
 - `GET /health`
@@ -192,6 +208,7 @@ Merk:
 - `GET /v1/documents/{doc_id}/download`
 - `POST /v1/admin/rebuild` (krever `X-API-Key` + `{"confirm": true}`)
 - `POST /v1/admin/ingest` (krever `X-API-Key`)
+- `POST /v1/admin/sync` (krever `X-API-Key`)
 - `GET /v1/admin/prompt-config` (krever `X-API-Key`)
 - `PUT /v1/admin/prompt-config` (krever `X-API-Key`)
 
