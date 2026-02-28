@@ -40,7 +40,12 @@ def rewrite_query_if_enabled(original_query: str, model_profile: str | None = No
         pass
     return original_query
 
-def compose_answer(question: str, context_chunks: Any, model_profile: str | None = None) -> str:
+def compose_answer(
+    question: str,
+    context_chunks: Any,
+    model_profile: str | None = None,
+    router_instruction: str | None = None,
+) -> str:
     persona = load_persona()
     template = load_answer_template()
     provider = default_provider(model_profile=model_profile)
@@ -53,7 +58,9 @@ def compose_answer(question: str, context_chunks: Any, model_profile: str | None
     else:
         context = _format_context(context_chunks)
 
+    focus_block = f"ROUTER_FOKUS:\n{router_instruction}\n\n" if router_instruction else ""
     user_prompt = (
+        f"{focus_block}"
         "Du skal svare ved å bruke KUN informasjonen i CONTEXT.\n"
         "VIKTIG: Hvert avsnitt i svaret skal inneholde minst én kildehenvisning i formen [1], [2], osv. "
         "Bruk tall som matcher kildene i CONTEXT.\n\n"

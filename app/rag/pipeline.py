@@ -8,6 +8,7 @@ from app.settings import settings
 from app.models.schemas import ChatResponse, Citation
 from app.rag.index.embedder import default_embedder
 from app.rag.retrieve.hybrid import hybrid_retrieve
+from app.rag.retrieve.query_router import route_query, router_prompt_instruction
 from app.rag.retrieve.rerank import default_reranker
 from app.rag.retrieve.pack_context import pack_context
 from app.rag.generate.composer import compose_answer, rewrite_query_if_enabled
@@ -34,7 +35,8 @@ def answer_question(
     model_profile: Optional[str] = None,
 ) -> ChatResponse:
     filters = filters or {}
-    internal_filters = _map_filters(filters)
+    routed_filters, query_plan = route_query(message, filters)
+    internal_filters = _map_filters(routed_filters)
 
     # Rewrite (optional)
     query = rewrite_query_if_enabled(message, model_profile=model_profile)
@@ -59,10 +61,18 @@ def answer_question(
 
     # Pack context (and also build citations)
     packed = pack_context(candidates, int(top_k or 50))
+    if packed.debug is None:
+        packed.debug = {}
+    packed.debug["query_plan"] = query_plan
 
     # Compose answer with concurrency throttle
     with _LLM_SEM:
-        answer = compose_answer(message, packed, model_profile=model_profile)
+        answer = compose_answer(
+            message,
+            packed,
+            model_profile=model_profile,
+            router_instruction=router_prompt_instruction(query_plan),
+        )
 
     # Grounding gate (optional but recommended)
     citations = packed.citations
@@ -80,6 +90,7 @@ def answer_question_stream(
 ) -> Iterable[bytes]:
     """SSE stream.
     Events:
+      - query_plan: JSON plan for router/filter decisions
       - citations: JSON list
       - delta: {delta: "..."}
       - error: {message: "...", type?: "..."}
@@ -87,6 +98,14 @@ def answer_question_stream(
     """
     try:
         resp = answer_question(message, conversation_id, filters or {}, top_k, model_profile=model_profile)
+
+        # Send query plan first when available.
+        query_plan = None
+        if resp.retrieval_debug and isinstance(resp.retrieval_debug, dict):
+            query_plan = resp.retrieval_debug.get("query_plan")
+        if query_plan is not None:
+            plan_payload = json.dumps(query_plan, ensure_ascii=False)
+            yield f"event: query_plan\ndata: {plan_payload}\n\n".encode("utf-8")
 
         # Send citations first
         citations_payload = json.dumps([c.model_dump() for c in resp.citations], ensure_ascii=False)

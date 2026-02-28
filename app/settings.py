@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     llm_profiles_json: str = ""
     system_persona_path: str = ""
     answer_template_path: str = ""
+    query_router_enabled: bool = False
+    query_router_docs_source_types_json: str = ""
+    query_router_prompts_source_types_json: str = ""
+    query_router_prompts_keywords_json: str = ""
 
     top_k_vector: int = 50
     top_k_lexical: int = 50

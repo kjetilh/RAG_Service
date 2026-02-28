@@ -171,6 +171,7 @@ Anbefalt driftsmønster:
 - `uploads/dimy/cell_haven_docs_drop` for engangs-ingest (flyttes til `done/failed`)
 - `uploads/dimy/cell_haven_docs_live` for kontinuerlig synk (`/v1/admin/sync`)
 - bruk `dry_run=true` før første kjøring i ny mappe
+- bruk `GET /v1/admin/coverage-report` for å finne mangler/inkonsistenser i dokumentasjonen
 ### 6.2 Last opp CellProtocol/HAVEN-dokumenter fra lokal checkout
 
 Eksempel (kjores lokalt, laster opp til VPS):
@@ -244,6 +245,24 @@ Standard i compose:
 - `rag_dimy_api` -> `/app/prompts/system_persona_dimy.md` + `/app/prompts/answer_template_dimy.md`
 
 Dermed kan prompt byttes uten kodeendring, kun med env-fil + restart.
+
+### 7.2 Query-router for dokumentasjons-RAG
+
+`rag_dimy_api` kan automatisk rute forespørsler mellom docs og prompts:
+
+- hvis bruker sender eksplisitt `filters.source_type`, brukes det.
+- ellers brukes keyword-basert heuristikk:
+  - prompt-relaterte ord -> prompt-source_types
+  - ellers -> docs-source_types
+
+Query-plan returneres i `retrieval_debug.query_plan`.
+
+Viktige env-variabler:
+
+- `RAG_DIMY_QUERY_ROUTER_ENABLED`
+- `RAG_DIMY_QUERY_ROUTER_DOCS_SOURCE_TYPES_JSON`
+- `RAG_DIMY_QUERY_ROUTER_PROMPTS_SOURCE_TYPES_JSON`
+- `RAG_DIMY_QUERY_ROUTER_PROMPTS_KEYWORDS_JSON`
 
 ## 8) Eksponering via reverse proxy
 

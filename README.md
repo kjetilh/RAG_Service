@@ -209,6 +209,7 @@ curl -X POST http://localhost:8000/v1/admin/sync \
 - `POST /v1/admin/rebuild` (krever `X-API-Key` + `{"confirm": true}`)
 - `POST /v1/admin/ingest` (krever `X-API-Key`)
 - `POST /v1/admin/sync` (krever `X-API-Key`)
+- `GET /v1/admin/coverage-report` (krever `X-API-Key`)
 - `GET /v1/admin/prompt-config` (krever `X-API-Key`)
 - `PUT /v1/admin/prompt-config` (krever `X-API-Key`)
 
@@ -229,6 +230,16 @@ curl -X PUT http://localhost:8000/v1/admin/prompt-config \
   }'
 ```
 
+Eksempel coverage/gap rapport:
+
+```bash
+curl -X GET http://localhost:8000/v1/admin/coverage-report \
+  -H "X-API-Key: <DIN_ADMIN_API_KEY>"
+```
+
+Når query-router er aktiv legges query-plan i `retrieval_debug.query_plan` i chat-responsen.
+Ved SSE (`/v1/chat/stream`) sendes den som `event: query_plan` før `citations`.
+
 ## Miljøvariabler du oftest justerer
 
 - `DATABASE_URL`
@@ -241,6 +252,10 @@ curl -X PUT http://localhost:8000/v1/admin/prompt-config \
 - `ADMIN_API_KEY`
 - `INGEST_ROOT`
 - `QUERY_REWRITE_ENABLED`
+- `QUERY_ROUTER_ENABLED`
+- `QUERY_ROUTER_DOCS_SOURCE_TYPES_JSON`
+- `QUERY_ROUTER_PROMPTS_SOURCE_TYPES_JSON`
+- `QUERY_ROUTER_PROMPTS_KEYWORDS_JSON`
 - `RERANKER_ENABLED`
 - `GROUNDING_MIN_CITATIONS`
 - `STREAM_CHUNK_CHARS`
