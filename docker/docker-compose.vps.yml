@@ -48,6 +48,7 @@ services:
       QUERY_ROUTER_ENABLED: '${RAG_INNOVASJON_QUERY_ROUTER_ENABLED:-false}'
       QUERY_ROUTER_DOCS_SOURCE_TYPES_JSON: '${RAG_INNOVASJON_QUERY_ROUTER_DOCS_SOURCE_TYPES_JSON:-}'
       QUERY_ROUTER_PROMPTS_SOURCE_TYPES_JSON: '${RAG_INNOVASJON_QUERY_ROUTER_PROMPTS_SOURCE_TYPES_JSON:-}'
+      QUERY_ROUTER_DOCS_KEYWORDS_JSON: '${RAG_INNOVASJON_QUERY_ROUTER_DOCS_KEYWORDS_JSON:-}'
       QUERY_ROUTER_PROMPTS_KEYWORDS_JSON: '${RAG_INNOVASJON_QUERY_ROUTER_PROMPTS_KEYWORDS_JSON:-}'
       ADMIN_API_KEY: ${RAG_INNOVASJON_ADMIN_API_KEY:-}
       INGEST_ROOT: /data/uploads
@@ -100,7 +101,8 @@ services:
       QUERY_ROUTER_ENABLED: '${RAG_DIMY_QUERY_ROUTER_ENABLED:-true}'
       QUERY_ROUTER_DOCS_SOURCE_TYPES_JSON: '${RAG_DIMY_QUERY_ROUTER_DOCS_SOURCE_TYPES_JSON:-["haven_docs","cellprotocol_docs"]}'
       QUERY_ROUTER_PROMPTS_SOURCE_TYPES_JSON: '${RAG_DIMY_QUERY_ROUTER_PROMPTS_SOURCE_TYPES_JSON:-["dimy_prompts","prompt_docs"]}'
-      QUERY_ROUTER_PROMPTS_KEYWORDS_JSON: '${RAG_DIMY_QUERY_ROUTER_PROMPTS_KEYWORDS_JSON:-["prompt","prompts","instruksjon","instruction","template","mal","system prompt","policy","agent"]}'
+      QUERY_ROUTER_DOCS_KEYWORDS_JSON: '${RAG_DIMY_QUERY_ROUTER_DOCS_KEYWORDS_JSON:-["api","endpoint","kode","code","implementasjon","implementation","arkitektur","architecture","database","postgres","docker","deploy","sync","ingest","test","feil","error","bug"]}'
+      QUERY_ROUTER_PROMPTS_KEYWORDS_JSON: '${RAG_DIMY_QUERY_ROUTER_PROMPTS_KEYWORDS_JSON:-["prompt","prompts","promptmal","system prompt","systeminstruksjon","instruksjon","instruction","template","mal","policy","agent"]}'
       ADMIN_API_KEY: ${RAG_DIMY_ADMIN_API_KEY:-}
       INGEST_ROOT: /data/uploads
     depends_on:

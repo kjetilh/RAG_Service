@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     query_router_enabled: bool = False
     query_router_docs_source_types_json: str = ""
     query_router_prompts_source_types_json: str = ""
+    query_router_docs_keywords_json: str = ""
     query_router_prompts_keywords_json: str = ""
 
     top_k_vector: int = 50

@@ -210,6 +210,7 @@ curl -X POST http://localhost:8000/v1/admin/sync \
 - `POST /v1/admin/ingest` (krever `X-API-Key`)
 - `POST /v1/admin/sync` (krever `X-API-Key`)
 - `GET /v1/admin/coverage-report` (krever `X-API-Key`)
+- `GET /v1/admin/coverage-actions` (krever `X-API-Key`)
 - `GET /v1/admin/prompt-config` (krever `X-API-Key`)
 - `PUT /v1/admin/prompt-config` (krever `X-API-Key`)
 
@@ -237,6 +238,13 @@ curl -X GET http://localhost:8000/v1/admin/coverage-report \
   -H "X-API-Key: <DIN_ADMIN_API_KEY>"
 ```
 
+Eksempel coverage handlingsplan:
+
+```bash
+curl -X GET http://localhost:8000/v1/admin/coverage-actions \
+  -H "X-API-Key: <DIN_ADMIN_API_KEY>"
+```
+
 Når query-router er aktiv legges query-plan i `retrieval_debug.query_plan` i chat-responsen.
 Ved SSE (`/v1/chat/stream`) sendes den som `event: query_plan` før `citations`.
 
@@ -255,6 +263,7 @@ Ved SSE (`/v1/chat/stream`) sendes den som `event: query_plan` før `citations`.
 - `QUERY_ROUTER_ENABLED`
 - `QUERY_ROUTER_DOCS_SOURCE_TYPES_JSON`
 - `QUERY_ROUTER_PROMPTS_SOURCE_TYPES_JSON`
+- `QUERY_ROUTER_DOCS_KEYWORDS_JSON`
 - `QUERY_ROUTER_PROMPTS_KEYWORDS_JSON`
 - `RERANKER_ENABLED`
 - `GROUNDING_MIN_CITATIONS`

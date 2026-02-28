@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.rag.audit.coverage_report import build_coverage_report
+from app.rag.audit.coverage_report import build_coverage_actions, build_coverage_report
 from app.rag.generate.prompt_config_store import (
     PromptRuntimeConfig,
     get_runtime_config,
@@ -112,6 +112,16 @@ def admin_coverage_report():
     try:
         report = build_coverage_report()
         return {"ok": True, "report": report}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/v1/admin/coverage-actions", dependencies=[Depends(_require_admin_api_key)])
+def admin_coverage_actions():
+    try:
+        report = build_coverage_report()
+        actions = build_coverage_actions(report)
+        return {"ok": True, "report_summary": report.get("summary", {}), "actions": actions}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

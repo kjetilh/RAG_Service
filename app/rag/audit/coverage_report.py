@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import datetime, timezone
+import json
 from pathlib import Path
 from typing import Any, Dict, Iterable, Mapping
 
@@ -209,3 +210,120 @@ def build_coverage_report() -> Dict[str, Any]:
         docs_source_types=cfg.docs_source_types,
         prompts_source_types=cfg.prompts_source_types,
     )
+
+
+def build_coverage_actions(report: Mapping[str, Any]) -> Dict[str, Any]:
+    summary = dict(report.get("summary") or {})
+    gaps = dict(report.get("gaps") or {})
+    metadata = dict(report.get("metadata_coverage") or {})
+    domain_counts = dict(report.get("domain_counts") or {})
+    by_source_type = dict(report.get("by_source_type") or {})
+    cfg = router_config_from_settings()
+
+    actions: list[Dict[str, Any]] = []
+
+    missing_files_count = int(gaps.get("missing_files_count") or 0)
+    if missing_files_count > 0:
+        missing_samples = list(gaps.get("missing_files_sample") or [])
+        affected_types = sorted({str(item.get("source_type") or "<unknown>") for item in missing_samples})
+        actions.append(
+            {
+                "id": "fix_missing_files",
+                "severity": "high",
+                "why": f"{missing_files_count} dokumenter peker til filer som ikke finnes.",
+                "action": "Kjor sync per source_type for a oppdatere/slette foreldede poster.",
+                "endpoint": "/v1/admin/sync",
+                "suggested_requests": [
+                    {
+                        "path": ".",
+                        "source_type": source_type,
+                        "delete_missing": True,
+                        "dry_run": True,
+                    }
+                    for source_type in affected_types[:10]
+                    if source_type not in {"<null>", "<empty>", "<unknown>"}
+                ],
+            }
+        )
+
+    thin_docs_count = int(gaps.get("thin_documents_count") or 0)
+    if thin_docs_count > 0:
+        actions.append(
+            {
+                "id": "expand_thin_documents",
+                "severity": "medium",
+                "why": f"{thin_docs_count} dokumenter har 0-1 chunks.",
+                "action": "Forbedre struktur i filer (overskrifter/avsnitt) eller legg til rikere kilder for disse dokumentene.",
+                "sample": list(gaps.get("thin_documents_sample") or [])[:10],
+            }
+        )
+
+    duplicate_titles = list(gaps.get("duplicate_titles") or [])
+    if duplicate_titles:
+        actions.append(
+            {
+                "id": "deduplicate_titles",
+                "severity": "medium",
+                "why": f"{len(duplicate_titles)} duplikate tittelklynger funnet.",
+                "action": "Verifiser om dette er bevisst versjonering eller duplikat ingest. Fjern duplikater ved behov.",
+                "sample": duplicate_titles[:10],
+            }
+        )
+
+    metadata_missing_total = sum(int(metadata.get(key) or 0) for key in metadata.keys())
+    if metadata_missing_total > 0:
+        actions.append(
+            {
+                "id": "improve_metadata",
+                "severity": "medium",
+                "why": f"Manglende metadata funnet (total={metadata_missing_total}).",
+                "action": "Backfill author/year/url/language/file_path i ingest eller metadata-kilde.",
+                "missing": metadata,
+            }
+        )
+
+    unclassified = int(domain_counts.get("unclassified") or 0)
+    if unclassified > 0:
+        unknown_types = []
+        known = set(cfg.docs_source_types) | set(cfg.prompts_source_types)
+        for source_type in sorted(by_source_type.keys()):
+            if source_type not in known:
+                unknown_types.append(source_type)
+        actions.append(
+            {
+                "id": "classify_source_types",
+                "severity": "high",
+                "why": f"{unclassified} dokumenter har source_type som ikke er klassifisert av query-router.",
+                "action": "Klassifiser source_types som docs eller prompts, og oppdater router-konfigurasjon.",
+                "unclassified_source_types": unknown_types[:20],
+            }
+        )
+
+    recommended_docs = [s for s in cfg.docs_source_types if s in by_source_type]
+    recommended_prompts = [s for s in cfg.prompts_source_types if s in by_source_type]
+    actions.append(
+        {
+            "id": "router_tuning",
+            "severity": "low",
+            "why": "Routerkonfigurasjon bor holdes synkron med faktiske source_types i databasen.",
+            "action": "Bruk disse verdiene som utgangspunkt i env for dokumentasjons-RAG.",
+            "recommended_env": {
+                "QUERY_ROUTER_DOCS_SOURCE_TYPES_JSON": json.dumps(recommended_docs or cfg.docs_source_types, ensure_ascii=False),
+                "QUERY_ROUTER_PROMPTS_SOURCE_TYPES_JSON": json.dumps(
+                    recommended_prompts or cfg.prompts_source_types, ensure_ascii=False
+                ),
+                "QUERY_ROUTER_DOCS_KEYWORDS_JSON": json.dumps(cfg.docs_keywords, ensure_ascii=False),
+                "QUERY_ROUTER_PROMPTS_KEYWORDS_JSON": json.dumps(cfg.prompts_keywords, ensure_ascii=False),
+            },
+        }
+    )
+
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "summary": {
+            "total_documents": int(summary.get("total_documents") or 0),
+            "total_chunks": int(summary.get("total_chunks") or 0),
+            "action_count": len(actions),
+        },
+        "actions": actions,
+    }

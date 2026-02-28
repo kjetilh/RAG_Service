@@ -252,8 +252,9 @@ Dermed kan prompt byttes uten kodeendring, kun med env-fil + restart.
 
 - hvis bruker sender eksplisitt `filters.source_type`, brukes det.
 - ellers brukes keyword-basert heuristikk:
-  - prompt-relaterte ord -> prompt-source_types
-  - ellers -> docs-source_types
+  - scorer prompt-keywords og docs-keywords
+  - flest treff vinner
+  - ved likt antall treff velges docs som sikker default
 
 Query-plan returneres i `retrieval_debug.query_plan`.
 
@@ -262,7 +263,20 @@ Viktige env-variabler:
 - `RAG_DIMY_QUERY_ROUTER_ENABLED`
 - `RAG_DIMY_QUERY_ROUTER_DOCS_SOURCE_TYPES_JSON`
 - `RAG_DIMY_QUERY_ROUTER_PROMPTS_SOURCE_TYPES_JSON`
+- `RAG_DIMY_QUERY_ROUTER_DOCS_KEYWORDS_JSON`
 - `RAG_DIMY_QUERY_ROUTER_PROMPTS_KEYWORDS_JSON`
+
+### 7.3 Coverage actions for admin-celle
+
+Nytt endepunkt for konkrete tiltak:
+
+- `GET /v1/admin/coverage-actions`
+
+Dette bygger pa `coverage-report` og returnerer prioriterte handlinger, f.eks:
+
+- manglende filer -> foreslatte `sync` kall per `source_type`
+- uklassifiserte `source_type` -> forslag til router-klassifisering
+- metadata-mangler og tynde dokumenter -> forbedringsliste
 
 ## 8) Eksponering via reverse proxy
 
