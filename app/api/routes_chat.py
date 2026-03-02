@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import text
 
-from app.models.schemas import ChatRequest, ChatResponse
+from app.models.schemas import ChatRequest, ChatResponse, QueryRequest, QueryResponse
 from app.rag.generate.llm_provider import ModelProfileError, validate_model_profile
 from app.rag.index.db import engine
 from app.rag.pipeline import answer_question, answer_question_stream
@@ -53,16 +53,58 @@ def _document_file_path(doc_id: str) -> str:
         raise HTTPException(status_code=404, detail="No file registered for this document.")
     return str(file_path)
 
+
+def _filters_with_case(filters: dict | None, case_id: str | None) -> dict:
+    out = dict(filters or {})
+    if case_id:
+        out["rag_case_id"] = case_id
+    return out
+
+
+def _run_query(req: QueryRequest):
+    validate_model_profile(req.model_profile)
+    return answer_question(
+        message=req.query,
+        conversation_id=req.conversation_id,
+        filters=_filters_with_case(req.filters, req.case_id),
+        top_k=req.top_k,
+        model_profile=req.model_profile,
+    )
+
+
+@router.post("/v1/query", response_model=QueryResponse)
+def query(req: QueryRequest):
+    try:
+        resp = _run_query(req)
+        trace = None
+        if resp.retrieval_debug and isinstance(resp.retrieval_debug, dict):
+            trace = resp.retrieval_debug.get("query_plan")
+        return QueryResponse(
+            answer=resp.answer,
+            citations=resp.citations,
+            retrieval_debug=resp.retrieval_debug,
+            trace=trace,
+        )
+    except ModelProfileError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.post("/v1/chat", response_model=ChatResponse)
 def chat(req: ChatRequest):
     try:
-        validate_model_profile(req.model_profile)
-        return answer_question(
-            message=req.message,
+        query_req = QueryRequest(
+            query=req.message,
             conversation_id=req.conversation_id,
             filters=req.filters or {},
             top_k=req.top_k,
             model_profile=req.model_profile,
+        )
+        resp = _run_query(query_req)
+        return ChatResponse(
+            answer=resp.answer,
+            citations=resp.citations,
+            retrieval_debug=resp.retrieval_debug,
         )
     except ModelProfileError as e:
         raise HTTPException(status_code=400, detail=str(e))

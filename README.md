@@ -217,6 +217,7 @@ Se `docs/SYNC_ORCHESTRATOR.md` for full oppsett (inkl. systemd timer).
 ## API-endepunkter
 
 - `GET /health`
+- `POST /v1/query`
 - `POST /v1/chat`
 - `POST /v1/chat/stream`
 - `GET /v1/documents/{doc_id}/download`
@@ -230,6 +231,9 @@ Se `docs/SYNC_ORCHESTRATOR.md` for full oppsett (inkl. systemd timer).
 
 `/v1/chat` og `/v1/chat/stream` støtter valgfritt request-felt:
 - `model_profile` (streng): velger modellprofil fra `LLM_PROFILES_JSON`.
+
+`/v1/query` støtter i tillegg:
+- `case_id` for eksplisitt valg av RAG-case (fra `config/rag_cases.yml`).
 
 Eksempel oppdatering av aktiv prompt-konfig:
 
@@ -271,8 +275,13 @@ Ved SSE (`/v1/chat/stream`) sendes den som `event: query_plan` før `citations`.
 - `LLM_PROFILES_JSON`
 - `SYSTEM_PERSONA_PATH`
 - `ANSWER_TEMPLATE_PATH`
+- `NEXT_GEN_RAG_ENABLED`
+- `RAG_CASES_PATH`
 - `ADMIN_API_KEY`
 - `INGEST_ROOT`
+- `SYNC_TOMBSTONE_ENABLED`
+- `SYNC_TOMBSTONE_GRACE_SECONDS`
+- `SYNC_ANTI_THRASH_BATCH_SIZE`
 - `QUERY_REWRITE_ENABLED`
 - `QUERY_ROUTER_ENABLED`
 - `QUERY_ROUTER_DOCS_SOURCE_TYPES_JSON`
