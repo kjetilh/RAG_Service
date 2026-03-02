@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     answer_template_path: str = ""
     next_gen_rag_enabled: bool = False
     rag_cases_path: str = "config/rag_cases.yml"
+    cell_access_control_enabled: bool = False
+    cell_gateway_shared_secret: str = ""
+    cell_owner_user_ids_json: str = "[]"
     query_router_enabled: bool = False
     query_router_docs_source_types_json: str = ""
     query_router_prompts_source_types_json: str = ""

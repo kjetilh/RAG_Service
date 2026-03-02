@@ -221,6 +221,14 @@ Se `docs/SYNC_ORCHESTRATOR.md` for full oppsett (inkl. systemd timer).
 - `POST /v1/chat`
 - `POST /v1/chat/stream`
 - `GET /v1/documents/{doc_id}/download`
+- `GET /v1/cell/cases`
+- `POST /v1/cell/cases/{case_id}/query`
+- `GET /v1/cell/cases/{case_id}/corpus`
+- `GET /v1/cell/cases/{case_id}/links`
+- `GET /v1/cell/cases/{case_id}/documents/{doc_id}/links`
+- `GET /v1/cell/cases/{case_id}/members`
+- `PUT /v1/cell/cases/{case_id}/members/{user_id}`
+- `DELETE /v1/cell/cases/{case_id}/members/{user_id}`
 - `POST /v1/admin/rebuild` (krever `X-API-Key` + `{"confirm": true}`)
 - `POST /v1/admin/ingest` (krever `X-API-Key`)
 - `POST /v1/admin/sync` (krever `X-API-Key`)
@@ -234,6 +242,13 @@ Se `docs/SYNC_ORCHESTRATOR.md` for full oppsett (inkl. systemd timer).
 
 `/v1/query` støtter i tillegg:
 - `case_id` for eksplisitt valg av RAG-case (fra `config/rag_cases.yml`).
+
+CellScaffold-integrasjon kan bruke `/v1/cell/cases/{case_id}/query` for tvungen case-tilordning + RBAC.
+Når `CELL_ACCESS_CONTROL_ENABLED=true` kreves:
+- `X-Cell-Gateway-Secret: <CELL_GATEWAY_SHARED_SECRET>`
+- `X-Cell-User-Id: <autentisert bruker-id i Scaffold>`
+
+`X-API-Key` (admin) bypasser RBAC for drift/feilsøking.
 
 Eksempel oppdatering av aktiv prompt-konfig:
 
@@ -277,6 +292,9 @@ Ved SSE (`/v1/chat/stream`) sendes den som `event: query_plan` før `citations`.
 - `ANSWER_TEMPLATE_PATH`
 - `NEXT_GEN_RAG_ENABLED`
 - `RAG_CASES_PATH`
+- `CELL_ACCESS_CONTROL_ENABLED`
+- `CELL_GATEWAY_SHARED_SECRET`
+- `CELL_OWNER_USER_IDS_JSON`
 - `ADMIN_API_KEY`
 - `INGEST_ROOT`
 - `SYNC_TOMBSTONE_ENABLED`

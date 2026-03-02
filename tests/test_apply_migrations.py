@@ -89,3 +89,17 @@ def test_doc_state_migration_exists_and_contains_expected_columns():
     assert "ADD COLUMN IF NOT EXISTS doc_state" in sql
     assert "ADD COLUMN IF NOT EXISTS doc_version" in sql
     assert "tombstone_pending" in sql
+
+
+def test_case_access_migration_exists_and_contains_expected_columns():
+    migration_path = (
+        Path(__file__).resolve().parents[1]
+        / "app"
+        / "rag"
+        / "index"
+        / "migrations"
+        / "0002_case_access_control.sql"
+    )
+    sql = migration_path.read_text(encoding="utf-8")
+    assert "CREATE TABLE IF NOT EXISTS rag_case_access" in sql
+    assert "CHECK (role IN ('owner', 'admin', 'viewer'))" in sql
