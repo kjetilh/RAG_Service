@@ -27,7 +27,7 @@ def vector_search(query_embedding: np.ndarray, top_k: int = 50, filters: dict | 
     where_sql = ("WHERE " + " AND ".join(where)) if where else ""
 
     sql = f'''
-    SELECT c.chunk_id, c.doc_id, d.title, d.author, d.year, d.source_type,
+    SELECT c.chunk_id, c.doc_id, c.ordinal, d.title, d.author, d.year, d.source_type,
            d.publisher, d.url, d.language, d.identifiers,
            c.content,
            1 - (e.embedding <=> CAST(:q AS vector)) AS score
@@ -35,7 +35,7 @@ def vector_search(query_embedding: np.ndarray, top_k: int = 50, filters: dict | 
     JOIN chunks c ON c.chunk_id = e.chunk_id
     JOIN documents d ON d.doc_id = c.doc_id
     {where_sql}
-    ORDER BY e.embedding <=> CAST(:q AS vector)
+    ORDER BY e.embedding <=> CAST(:q AS vector), c.doc_id, c.ordinal, c.chunk_id
     LIMIT :top_k
     '''
     with engine().begin() as conn:

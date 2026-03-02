@@ -8,7 +8,7 @@ from app.settings import settings
 from app.models.schemas import ChatResponse, Citation
 from app.rag.index.embedder import default_embedder
 from app.rag.retrieve.hybrid import hybrid_retrieve
-from app.rag.retrieve.query_router import route_query, router_prompt_instruction
+from app.rag.planner.deterministic import plan_query
 from app.rag.retrieve.rerank import default_reranker
 from app.rag.retrieve.pack_context import pack_context
 from app.rag.generate.composer import compose_answer, rewrite_query_if_enabled
@@ -35,8 +35,8 @@ def answer_question(
     model_profile: Optional[str] = None,
 ) -> ChatResponse:
     filters = filters or {}
-    routed_filters, query_plan = route_query(message, filters)
-    internal_filters = _map_filters(routed_filters)
+    plan = plan_query(message, filters)
+    internal_filters = _map_filters(plan.filters)
 
     # Rewrite (optional)
     query = rewrite_query_if_enabled(message, model_profile=model_profile)
@@ -46,24 +46,37 @@ def answer_question(
     query_emb = embedder.embed(query)
 
     # Retrieve candidates
+    retrieval_top_k_final = int(plan.retrieval.get("top_k_final", int(top_k or 50)))
+    retrieval_top_k_vector = int(
+        plan.retrieval.get("top_k_vector", max(10, int((retrieval_top_k_final or 50) * 0.7)))
+    )
+    retrieval_top_k_lexical = int(
+        plan.retrieval.get("top_k_lexical", max(10, int((retrieval_top_k_final or 50) * 0.7)))
+    )
+    effective_top_k = int(top_k or retrieval_top_k_final or 50)
+
     candidates = hybrid_retrieve(
         query=query,
         query_emb=query_emb,
-        top_k_vector=max(10, int((top_k or 50) * 0.7)),
-        top_k_lexical=max(10, int((top_k or 50) * 0.7)),
+        top_k_vector=max(1, retrieval_top_k_vector),
+        top_k_lexical=max(1, retrieval_top_k_lexical),
         filters=internal_filters,
     )
 
     # Rerank (optional)
     if settings.reranker_enabled:
         reranker = default_reranker()
-        candidates = reranker.rerank(query, candidates, top_k=int(top_k or 50))
+        candidates = reranker.rerank(query, candidates, top_k=effective_top_k)
 
     # Pack context (and also build citations)
-    packed = pack_context(candidates, int(top_k or 50))
+    packed = pack_context(
+        candidates,
+        effective_top_k,
+        max_chunks_per_doc=int(plan.retrieval.get("max_chunks_per_doc", settings.max_chunks_per_doc)),
+    )
     if packed.debug is None:
         packed.debug = {}
-    packed.debug["query_plan"] = query_plan
+    packed.debug["query_plan"] = plan.trace
 
     # Compose answer with concurrency throttle
     with _LLM_SEM:
@@ -71,7 +84,7 @@ def answer_question(
             message,
             packed,
             model_profile=model_profile,
-            router_instruction=router_prompt_instruction(query_plan),
+            router_instruction=plan.prompt_instruction,
         )
 
     # Grounding gate (optional but recommended)

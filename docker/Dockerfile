@@ -9,6 +9,7 @@ COPY pyproject.toml README.md /app/
 COPY app /app/app
 COPY scripts /app/scripts
 COPY prompts /app/prompts
+COPY config /app/config
 
 RUN pip install --no-cache-dir -U pip \
  && pip install --no-cache-dir -e '.[pdf,docx,html]' \

@@ -20,7 +20,15 @@ def pack_context(candidates, top_k: int, max_chunks_per_doc: int = 4) -> PackedC
     selected = []
     per_doc: Dict[str, int] = {}
 
-    for c in sorted(candidates, key=lambda x: float(getattr(x, "score", 0.0)), reverse=True):
+    def _sort_key(x):
+        return (
+            -float(getattr(x, "score", 0.0)),
+            str(getattr(x, "doc_id", "")),
+            int(getattr(x, "ordinal", 0)),
+            str(getattr(x, "chunk_id", "")),
+        )
+
+    for c in sorted(candidates, key=_sort_key):
         if len(selected) >= top_k:
             break
         doc_id = getattr(c, "doc_id", None)

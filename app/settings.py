@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     llm_profiles_json: str = ""
     system_persona_path: str = ""
     answer_template_path: str = ""
+    next_gen_rag_enabled: bool = False
+    rag_cases_path: str = "config/rag_cases.yml"
     query_router_enabled: bool = False
     query_router_docs_source_types_json: str = ""
     query_router_prompts_source_types_json: str = ""
