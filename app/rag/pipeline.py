@@ -12,6 +12,7 @@ from app.rag.planner.deterministic import plan_query
 from app.rag.retrieve.rerank import default_reranker
 from app.rag.retrieve.pack_context import pack_context
 from app.rag.generate.composer import compose_answer, rewrite_query_if_enabled
+from app.rag.eval.gate import run_evaluation_gate
 from app.rag.safety.grounding import strict_grounding_check
 
 # Global throttle to avoid parallel LLM calls from the UI (double-submit / reconnect / multiple tabs).
@@ -90,6 +91,13 @@ def answer_question(
     # Grounding gate (optional but recommended)
     citations = packed.citations
     strict_grounding_check(answer, citations)
+    evaluation_gate = run_evaluation_gate(citations, plan.evaluation)
+    packed.debug["evaluation_gate"] = evaluation_gate
+    if evaluation_gate.get("enforced") and not evaluation_gate.get("passed"):
+        raise ValueError(
+            "Evaluation gate failed: "
+            + ", ".join(v.get("rule", "unknown") for v in evaluation_gate.get("violations", []))
+        )
 
     return ChatResponse(answer=answer, citations=citations, retrieval_debug=packed.debug)
 
