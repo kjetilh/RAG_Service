@@ -22,6 +22,7 @@ Dette repoet er ment som:
 - API: FastAPI (`app/main.py`)
 - Indeksering: `scripts/rebuild_index.py`
 - Ingest: `scripts/ingest_folder.py`
+- Multi-repo synk: `scripts/sync_orchestrator.py`
 - Retrieval/generering: `app/rag/*`
 - Database: PostgreSQL + pgvector
 
@@ -199,6 +200,19 @@ curl -X POST http://localhost:8000/v1/admin/sync \
     "dry_run":false
   }'
 ```
+
+## Sync orchestrator (flere repoer -> dokumentasjons-RAG)
+
+For kontinuerlig synk mellom flere repoer og dokumentasjons-RAG:
+
+```bash
+cp config/sync_orchestrator.example.toml config/sync_orchestrator.toml
+set -a && . docker/.env.vps.multi && set +a
+python -m scripts.sync_orchestrator --config config/sync_orchestrator.toml --sync-dry-run
+python -m scripts.sync_orchestrator --config config/sync_orchestrator.toml
+```
+
+Se `docs/SYNC_ORCHESTRATOR.md` for full oppsett (inkl. systemd timer).
 
 ## API-endepunkter
 

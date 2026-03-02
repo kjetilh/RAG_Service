@@ -1,0 +1,38 @@
+[orchestrator]
+# Host path that maps to /data/uploads in rag_dimy_api container.
+ingest_root = "/srv/ops/rag_service/uploads/dimy"
+ingest_live_subdir = "cell_haven_docs_live"
+
+# Documentation RAG admin endpoint.
+admin_base_url = "http://127.0.0.1:8102"
+admin_api_key_env = "RAG_DIMY_ADMIN_API_KEY"
+request_timeout_sec = 120
+fetch_coverage_actions = true
+
+include_default = ["**/*.md", "**/*.markdown", "**/*.txt", "**/*.html", "**/*.htm", "**/*.pdf", "**/*.docx"]
+exclude_default = ["**/.git/**", "**/.venv/**", "**/node_modules/**", "**/__pycache__/**", "**/.build/**", "**/.swiftpm/**"]
+
+[[source]]
+name = "CellProtocol"
+repo_path = "/srv/ops/repos/CellProtocol"
+source_type = "cellprotocol_docs"
+target_subdir = "cellprotocol/CellProtocol"
+
+[[source]]
+name = "CellProtocolDocuments"
+repo_path = "/srv/ops/repos/CellProtocolDocuments"
+source_type = "haven_docs"
+target_subdir = "cellprotocol/CellProtocolDocuments"
+
+[[source]]
+name = "CellScaffoldDocs"
+repo_path = "/srv/ops/repos/CellScaffold"
+source_type = "haven_docs"
+target_subdir = "cellprotocol/CellScaffold"
+
+[[source]]
+name = "CellScaffoldPrompts"
+repo_path = "/srv/ops/repos/CellScaffold"
+source_type = "dimy_prompts"
+target_subdir = "cellprotocol/CellScaffoldPrompts"
+include = ["**/*prompt*.md", "**/*Prompt*.md", "**/*.prompt", "prompts/**/*.md"]

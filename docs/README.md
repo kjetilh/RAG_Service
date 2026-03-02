@@ -21,6 +21,7 @@ Denne mappen inneholder driftsnotater og arbeidsdokumenter.
 - `05_Chat_UI.md`: hvordan den enkle chat-UI-en fungerer.
 - `RAG_tjeneste_flyt.md`: flytdiagram/skisse av tjenesten.
 - `SCAFFOLD_CELL_PROMPTS.md`: promptmaler for router-celle og domene-celler.
+- `SYNC_ORCHESTRATOR.md`: orchestrering av kontinuerlig synk mellom flere repoer og dokumentasjons-RAG.
 - `DEEP_RESEARCH_RAG_VERKTOY_PROMPT.md`: kontekstpakke og ferdig prompt til ChatGPT Deep Research.
 - `MULTI_RAG_ITERASJON_LOGG.md`: logg over iterasjonsleveranser.
 - `Makefile`: hjelpekommandoer for lokal drift.

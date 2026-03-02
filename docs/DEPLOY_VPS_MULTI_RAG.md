@@ -172,7 +172,30 @@ Anbefalt driftsmønster:
 - `uploads/dimy/cell_haven_docs_live` for kontinuerlig synk (`/v1/admin/sync`)
 - bruk `dry_run=true` før første kjøring i ny mappe
 - bruk `GET /v1/admin/coverage-report` for å finne mangler/inkonsistenser i dokumentasjonen
-### 6.2 Last opp CellProtocol/HAVEN-dokumenter fra lokal checkout
+
+### 6.2 Sync orchestrator (anbefalt)
+
+Bruk orchestrator for å synkronisere dokumentasjon fra flere repoer inn i live-mapper, og trigge `/v1/admin/sync` per kilde.
+
+1) Kopier eksempelkonfig:
+
+```bash
+cp config/sync_orchestrator.example.toml config/sync_orchestrator.toml
+```
+
+2) Oppdater `repo_path` per kilde.
+
+3) Kjor plan/sync:
+
+```bash
+set -a && . docker/.env.vps.multi && set +a
+python -m scripts.sync_orchestrator --config config/sync_orchestrator.toml --plan-only
+python -m scripts.sync_orchestrator --config config/sync_orchestrator.toml --sync-dry-run
+python -m scripts.sync_orchestrator --config config/sync_orchestrator.toml
+```
+
+Se `docs/SYNC_ORCHESTRATOR.md` for systemd timer-oppsett.
+### 6.3 Last opp CellProtocol/HAVEN-dokumenter fra lokal checkout
 
 Eksempel (kjores lokalt, laster opp til VPS):
 
