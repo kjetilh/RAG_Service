@@ -1,0 +1,41 @@
+version: 1
+default_case: dimy_docs
+cases:
+  - case_id: dimy_docs
+    description: Dokumentasjon og kodebruk for HAVEN/CellProtocol/CellScaffold.
+    enabled: true
+    planner:
+      docs_source_types: ["haven_docs", "cellprotocol_docs"]
+      prompts_source_types: ["dimy_prompts", "prompt_docs"]
+      docs_keywords: ["api", "endpoint", "kode", "code", "arkitektur", "architecture", "sync", "ingest", "deploy", "database"]
+      prompt_keywords: ["prompt", "prompts", "promptmal", "system prompt", "systeminstruksjon", "instruction", "template", "mal", "agent", "policy"]
+      default_domain: docs
+    retrieval:
+      top_k_vector: 50
+      top_k_lexical: 50
+      top_k_final: 12
+      max_chunks_per_doc: 3
+    evaluation:
+      min_citations: 2
+      min_unique_docs: 1
+      min_avg_score: 0.0
+      enforce: false
+  - case_id: innovasjon
+    description: Innovasjonsledelse og immovasjonsfag.
+    enabled: true
+    planner:
+      docs_source_types: ["innovasjonsledelse", "immovasjonsfag"]
+      prompts_source_types: []
+      docs_keywords: ["policy", "innovation", "innovasjon", "mission", "governance"]
+      prompt_keywords: []
+      default_domain: docs
+    retrieval:
+      top_k_vector: 50
+      top_k_lexical: 50
+      top_k_final: 12
+      max_chunks_per_doc: 3
+    evaluation:
+      min_citations: 2
+      min_unique_docs: 1
+      min_avg_score: 0.0
+      enforce: false
