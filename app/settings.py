@@ -48,6 +48,9 @@ class Settings(BaseSettings):
 
     # Restrict admin ingest to this filesystem root
     ingest_root: str = "/data/uploads"
+    sync_tombstone_enabled: bool = False
+    sync_tombstone_grace_seconds: int = 900
+    sync_anti_thrash_batch_size: int = 200
 
 
 settings = Settings()

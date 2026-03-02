@@ -90,6 +90,9 @@ class SyncRequest(BaseModel):
     year: int | None = None
     delete_missing: bool = True
     dry_run: bool = False
+    tombstone_mode: bool | None = None
+    tombstone_grace_seconds: int | None = None
+    anti_thrash_batch_size: int | None = None
 
 
 @router.post("/v1/admin/sync", dependencies=[Depends(_require_admin_api_key)])
@@ -103,6 +106,9 @@ def admin_sync(req: SyncRequest):
         year=req.year,
         delete_missing=req.delete_missing,
         dry_run=req.dry_run,
+        tombstone_mode=req.tombstone_mode,
+        tombstone_grace_seconds=req.tombstone_grace_seconds,
+        anti_thrash_batch_size=req.anti_thrash_batch_size,
     )
     return {"ok": len(summary.get("errors", [])) == 0, "summary": summary}
 
