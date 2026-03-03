@@ -56,6 +56,9 @@ services:
       QUERY_ROUTER_DOCS_KEYWORDS_JSON: '${RAG_INNOVASJON_QUERY_ROUTER_DOCS_KEYWORDS_JSON:-}'
       QUERY_ROUTER_PROMPTS_KEYWORDS_JSON: '${RAG_INNOVASJON_QUERY_ROUTER_PROMPTS_KEYWORDS_JSON:-}'
       ADMIN_API_KEY: ${RAG_INNOVASJON_ADMIN_API_KEY:-}
+      CELL_ACCESS_CONTROL_ENABLED: '${RAG_INNOVASJON_CELL_ACCESS_CONTROL_ENABLED:-false}'
+      CELL_GATEWAY_SHARED_SECRET: '${RAG_INNOVASJON_CELL_GATEWAY_SHARED_SECRET:-}'
+      CELL_OWNER_USER_IDS_JSON: '${RAG_INNOVASJON_CELL_OWNER_USER_IDS_JSON:-[]}'
       INGEST_ROOT: /data/uploads
     depends_on:
       rag_innovasjon_db:
@@ -109,6 +112,9 @@ services:
       QUERY_ROUTER_DOCS_KEYWORDS_JSON: '${RAG_DIMY_QUERY_ROUTER_DOCS_KEYWORDS_JSON:-["api","endpoint","kode","code","implementasjon","implementation","arkitektur","architecture","database","postgres","docker","deploy","sync","ingest","test","feil","error","bug"]}'
       QUERY_ROUTER_PROMPTS_KEYWORDS_JSON: '${RAG_DIMY_QUERY_ROUTER_PROMPTS_KEYWORDS_JSON:-["prompt","prompts","promptmal","system prompt","systeminstruksjon","instruksjon","instruction","template","mal","policy","agent"]}'
       ADMIN_API_KEY: ${RAG_DIMY_ADMIN_API_KEY:-}
+      CELL_ACCESS_CONTROL_ENABLED: '${RAG_DIMY_CELL_ACCESS_CONTROL_ENABLED:-false}'
+      CELL_GATEWAY_SHARED_SECRET: '${RAG_DIMY_CELL_GATEWAY_SHARED_SECRET:-}'
+      CELL_OWNER_USER_IDS_JSON: '${RAG_DIMY_CELL_OWNER_USER_IDS_JSON:-[]}'
       INGEST_ROOT: /data/uploads
     depends_on:
       rag_dimy_db:
