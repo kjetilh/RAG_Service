@@ -1,0 +1,13 @@
+{
+  "replace-with-long-random-token": {
+    "label": "chatgpt-deep-research",
+    "scopes": [
+      "research:read",
+      "research:download"
+    ],
+    "case_ids": [
+      "dimy_docs",
+      "dimy_prompts"
+    ]
+  }
+}
