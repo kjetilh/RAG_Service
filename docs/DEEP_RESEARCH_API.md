@@ -2,6 +2,8 @@
 
 Dette dokumentet beskriver et read-only API for dokumentasjon, prompts og andre research-orienterte RAG-cases.
 
+For full route-inventar pa tvers av `chat`, `admin`, `cell`, `interviews` og `research`, se `docs/RAG_SERVICE_API_ENDPUNKTER.md`.
+
 ## Formaal
 
 API-et er laget for:
@@ -77,6 +79,15 @@ For direkte browser-klikk pa `download_url` brukes normalt en kortlivet signert 
 Hvis `RESEARCH_DOWNLOAD_SIGNING_KEY` ikke er satt, faller API-et midlertidig tilbake til `access_token` i query string for bakoverkompatibilitet. Det bor bare brukes som overgang.
 
 ## Endepunkter
+
+Research-endepunktene er:
+
+- `GET /v1/research/cases`
+- `POST /v1/research/query`
+- `GET /v1/research/cases/{case_id}/corpus`
+- `GET /v1/research/cases/{case_id}/links`
+- `GET /v1/research/cases/{case_id}/documents/{doc_id}/links`
+- `GET /v1/research/documents/{doc_id}/download`
 
 ### `GET /v1/research/cases`
 
