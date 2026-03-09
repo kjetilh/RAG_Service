@@ -26,6 +26,12 @@ def _resp_with_plan():
 def test_query_endpoint_passes_case_id_in_filters(monkeypatch):
     captured = {}
     monkeypatch.setattr(routes_chat, "validate_model_profile", lambda _: None)
+    monkeypatch.setattr(
+        routes_chat,
+        "load_rag_cases",
+        lambda _path: type("Cfg", (), {"cases": [], "default_case": "innovasjon"})(),
+    )
+    monkeypatch.setattr(routes_chat, "case_by_id", lambda _cfg, case_id: type("Case", (), {"case_id": case_id})())
 
     def fake_answer_question(**kwargs):
         captured.update(kwargs)
@@ -37,6 +43,7 @@ def test_query_endpoint_passes_case_id_in_filters(monkeypatch):
         QueryRequest(
             query="hei",
             case_id="innovasjon",
+            prompt_profile_case_id="innovasjon_intervjuer",
             filters={"source_type": ["haven_docs"]},
             top_k=7,
         )
@@ -46,6 +53,7 @@ def test_query_endpoint_passes_case_id_in_filters(monkeypatch):
     assert captured["top_k"] == 7
     assert captured["filters"]["source_type"] == ["haven_docs"]
     assert captured["filters"]["rag_case_id"] == "innovasjon"
+    assert captured["prompt_profile_case_id"] == "innovasjon_intervjuer"
     assert resp.trace["selected_case"] == "docs_case"
 
 

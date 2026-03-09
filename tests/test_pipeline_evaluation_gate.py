@@ -71,3 +71,34 @@ def test_answer_question_enforces_failed_evaluation_gate(monkeypatch):
 
     with pytest.raises(ValueError):
         pipeline.answer_question("hei")
+
+
+def test_answer_question_uses_request_prompt_profile_case_id(monkeypatch):
+    captured = {}
+
+    monkeypatch.setattr(pipeline, "plan_query", lambda *args, **kwargs: _plan(enforce=False))
+    monkeypatch.setattr(pipeline, "rewrite_query_if_enabled", lambda *args, **kwargs: "q")
+    monkeypatch.setattr(pipeline, "default_embedder", lambda: _FakeEmbedder())
+    monkeypatch.setattr(pipeline, "hybrid_retrieve", lambda *args, **kwargs: [_candidate()])
+    monkeypatch.setattr(pipeline, "strict_grounding_check", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        pipeline,
+        "resolve_effective_paths",
+        lambda case_id=None: (
+            f"persona:{case_id}",
+            f"template:{case_id}",
+            "case",
+            "case",
+        ),
+    )
+
+    def _fake_compose_answer(*args, **kwargs):
+        captured.update(kwargs)
+        return "ok"
+
+    monkeypatch.setattr(pipeline, "compose_answer", _fake_compose_answer)
+
+    resp = pipeline.answer_question("hei", prompt_profile_case_id="innovasjon_intervjuer")
+    assert captured["case_id"] == "innovasjon_intervjuer"
+    assert resp.retrieval_debug["query_plan"]["requested_prompt_profile_case_id"] == "innovasjon_intervjuer"
+    assert resp.retrieval_debug["query_plan"]["effective_prompt_profile_case_id"] == "innovasjon_intervjuer"

@@ -80,6 +80,7 @@ def test_research_query_rewrites_download_urls_with_signed_grant(monkeypatch):
 
     def _fake_run(req):
         assert req.case_id == "doc_case"
+        assert req.prompt_profile_case_id == "prompt_case"
         return QueryResponse(
             answer="ok",
             citations=[
@@ -92,7 +93,11 @@ def test_research_query_rewrites_download_urls_with_signed_grant(monkeypatch):
     monkeypatch.setattr(routes_research, "_run_query", _fake_run)
 
     resp = routes_research.research_query(
-        routes_research.ResearchQueryRequest(case_id="doc_case", query="What changed?"),
+        routes_research.ResearchQueryRequest(
+            case_id="doc_case",
+            query="What changed?",
+            prompt_profile_case_id="prompt_case",
+        ),
         identity=_identity("research:read", "research:download", case_ids=["doc_case"], token="secret-token"),
     )
     assert resp.trace == {"selected_case": "doc_case"}

@@ -12,6 +12,7 @@ from app.rag.planner.deterministic import plan_query
 from app.rag.retrieve.rerank import default_reranker
 from app.rag.retrieve.pack_context import pack_context
 from app.rag.generate.composer import compose_answer, rewrite_query_if_enabled
+from app.rag.generate.prompt_config_store import resolve_effective_paths
 from app.rag.eval.gate import run_evaluation_gate
 from app.rag.safety.grounding import strict_grounding_check
 
@@ -34,6 +35,7 @@ def answer_question(
     filters: Optional[Dict[str, Any]] = None,
     top_k: Optional[int] = None,
     model_profile: Optional[str] = None,
+    prompt_profile_case_id: Optional[str] = None,
 ) -> ChatResponse:
     filters = filters or {}
     plan = plan_query(message, filters)
@@ -77,7 +79,18 @@ def answer_question(
     )
     if packed.debug is None:
         packed.debug = {}
-    packed.debug["query_plan"] = plan.trace
+    prompt_case_id = prompt_profile_case_id or plan.case_id
+    prompt_system_path, prompt_answer_path, prompt_system_source, prompt_answer_source = resolve_effective_paths(
+        case_id=prompt_case_id
+    )
+    query_plan = dict(plan.trace)
+    query_plan["requested_prompt_profile_case_id"] = prompt_profile_case_id
+    query_plan["effective_prompt_profile_case_id"] = prompt_case_id
+    query_plan["prompt_system_source"] = prompt_system_source
+    query_plan["prompt_answer_source"] = prompt_answer_source
+    query_plan["prompt_system_path"] = prompt_system_path
+    query_plan["prompt_answer_path"] = prompt_answer_path
+    packed.debug["query_plan"] = query_plan
 
     # Compose answer with concurrency throttle
     with _LLM_SEM:
@@ -86,7 +99,7 @@ def answer_question(
             packed,
             model_profile=model_profile,
             router_instruction=plan.prompt_instruction,
-            case_id=plan.case_id,
+            case_id=prompt_case_id,
         )
 
     # Grounding gate (optional but recommended)
@@ -109,6 +122,7 @@ def answer_question_stream(
     filters: Optional[Dict[str, Any]] = None,
     top_k: Optional[int] = None,
     model_profile: Optional[str] = None,
+    prompt_profile_case_id: Optional[str] = None,
 ) -> Iterable[bytes]:
     """SSE stream.
     Events:
@@ -119,7 +133,14 @@ def answer_question_stream(
       - done
     """
     try:
-        resp = answer_question(message, conversation_id, filters or {}, top_k, model_profile=model_profile)
+        resp = answer_question(
+            message,
+            conversation_id,
+            filters or {},
+            top_k,
+            model_profile=model_profile,
+            prompt_profile_case_id=prompt_profile_case_id,
+        )
 
         # Send query plan first when available.
         query_plan = None

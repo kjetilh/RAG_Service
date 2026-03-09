@@ -115,6 +115,7 @@ class LinkGraphResponse(BaseModel):
 
 
 class CellCollectiveSummaryRequest(BaseModel):
+    prompt_profile_case_id: str | None = None
     question_set_path: str | None = None
     question_set_id: str | None = None
     questions: list[InterviewQuestion] | None = None
@@ -419,6 +420,7 @@ def cell_query(case_id: str, req: QueryRequest, identity: CellIdentity = Depends
         filters=req.filters or {},
         top_k=req.top_k,
         model_profile=req.model_profile,
+        prompt_profile_case_id=req.prompt_profile_case_id,
     )
     try:
         resp = _run_query(query_req)
@@ -455,6 +457,7 @@ def cell_collective_summary(
         )
         return build_collective_summary(
             case_id=case_id,
+            prompt_profile_case_id=req.prompt_profile_case_id,
             question_set=question_set,
             filters=req.filters,
             top_k=req.top_k,

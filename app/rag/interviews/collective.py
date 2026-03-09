@@ -142,6 +142,7 @@ def _extract_trace_and_debug(response: Any) -> tuple[dict[str, Any] | None, dict
 def build_collective_summary(
     *,
     case_id: str | None,
+    prompt_profile_case_id: str | None,
     question_set: PreparedQuestionSet,
     filters: dict[str, Any] | None,
     top_k: int | None,
@@ -155,6 +156,7 @@ def build_collective_summary(
         req = QueryRequest(
             query=question.text,
             case_id=case_id,
+            prompt_profile_case_id=prompt_profile_case_id,
             filters=dict(base_filters),
             top_k=top_k,
             model_profile=model_profile,

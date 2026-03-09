@@ -5,6 +5,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import text
 
 from app.models.schemas import ChatRequest, ChatResponse, QueryRequest, QueryResponse
+from app.rag.cases.loader import case_by_id, load_rag_cases
 from app.rag.generate.llm_provider import ModelProfileError, validate_model_profile
 from app.rag.index.db import engine
 from app.rag.pipeline import answer_question, answer_question_stream
@@ -63,12 +64,16 @@ def _filters_with_case(filters: dict | None, case_id: str | None) -> dict:
 
 def _run_query(req: QueryRequest):
     validate_model_profile(req.model_profile)
+    if req.prompt_profile_case_id:
+        cfg = load_rag_cases(settings.rag_cases_path)
+        case_by_id(cfg, req.prompt_profile_case_id)
     return answer_question(
         message=req.query,
         conversation_id=req.conversation_id,
         filters=_filters_with_case(req.filters, req.case_id),
         top_k=req.top_k,
         model_profile=req.model_profile,
+        prompt_profile_case_id=req.prompt_profile_case_id,
     )
 
 
@@ -99,6 +104,7 @@ def chat(req: ChatRequest):
             filters=req.filters or {},
             top_k=req.top_k,
             model_profile=req.model_profile,
+            prompt_profile_case_id=req.prompt_profile_case_id,
         )
         resp = _run_query(query_req)
         return ChatResponse(
@@ -127,6 +133,7 @@ def chat_stream(req: ChatRequest):
             filters=req.filters or {},
             top_k=req.top_k,
             model_profile=req.model_profile,
+            prompt_profile_case_id=req.prompt_profile_case_id,
         )
         return StreamingResponse(gen, media_type="text/event-stream")
     except ModelProfileError as e:

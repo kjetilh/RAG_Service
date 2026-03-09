@@ -83,6 +83,7 @@ def test_cell_query_sets_case_id_and_returns_trace(monkeypatch):
     def _fake_run(req: QueryRequest):
         captured["case_id"] = req.case_id
         captured["filters"] = req.filters
+        captured["prompt_profile_case_id"] = req.prompt_profile_case_id
         return ChatResponse(
             answer="ok",
             citations=[Citation(doc_id="d1", title="t", chunk_id="c1", score=0.8, excerpt="x")],
@@ -93,11 +94,16 @@ def test_cell_query_sets_case_id_and_returns_trace(monkeypatch):
 
     resp = routes_cell.cell_query(
         "dimy_docs",
-        QueryRequest(query="hello", filters={"source_type": ["haven_docs"]}),
+        QueryRequest(
+            query="hello",
+            filters={"source_type": ["haven_docs"]},
+            prompt_profile_case_id="innovasjon_intervjuer",
+        ),
         identity=routes_cell.CellIdentity(user_id="u2"),
     )
     assert captured["case_id"] == "dimy_docs"
     assert captured["filters"]["source_type"] == ["haven_docs"]
+    assert captured["prompt_profile_case_id"] == "innovasjon_intervjuer"
     assert resp.trace["selected_case"] == "dimy_docs"
 
 
@@ -199,6 +205,7 @@ def test_cell_collective_summary_delegates_with_forced_case(monkeypatch):
         "innovasjon_intervjuer",
         routes_cell.CellCollectiveSummaryRequest(
             question_set_id="set-1",
+            prompt_profile_case_id="innovasjon_bokskriving",
             questions=[InterviewQuestion(question_id="Q1", text="Hva er hovedtrekkene?")],
             top_k=8,
             model_profile="gpt-4o-mini",
@@ -206,5 +213,6 @@ def test_cell_collective_summary_delegates_with_forced_case(monkeypatch):
         identity=routes_cell.CellIdentity(user_id="u1"),
     )
     assert captured["case_id"] == "innovasjon_intervjuer"
+    assert captured["prompt_profile_case_id"] == "innovasjon_bokskriving"
     assert captured["top_k"] == 8
     assert resp.question_set_id == "set-1"

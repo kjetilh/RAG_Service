@@ -56,6 +56,7 @@ class ResearchQueryRequest(BaseModel):
     filters: dict[str, Any] | None = None
     top_k: int | None = None
     model_profile: str | None = Field(default=None, min_length=1, max_length=64)
+    prompt_profile_case_id: str | None = Field(default=None, min_length=1, max_length=80)
 
 
 class SignedDownloadGrant(BaseModel):
@@ -366,6 +367,7 @@ def research_query(req: ResearchQueryRequest, identity: ResearchIdentity = Depen
         filters=req.filters or {},
         top_k=req.top_k,
         model_profile=req.model_profile,
+        prompt_profile_case_id=req.prompt_profile_case_id,
     )
     try:
         response = _run_query(query_req)

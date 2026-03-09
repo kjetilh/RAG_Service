@@ -19,6 +19,7 @@ router = APIRouter()
 
 class CollectiveSummaryRequest(BaseModel):
     case_id: str | None = Field(default=None, min_length=1, max_length=80)
+    prompt_profile_case_id: str | None = Field(default=None, min_length=1, max_length=80)
     question_set_path: str | None = Field(default=None, min_length=1, max_length=260)
     question_set_id: str | None = Field(default=None, min_length=1, max_length=120)
     questions: list[InterviewQuestion] | None = None
@@ -38,6 +39,7 @@ def interviews_collective_summary(req: CollectiveSummaryRequest):
         )
         return build_collective_summary(
             case_id=req.case_id,
+            prompt_profile_case_id=req.prompt_profile_case_id,
             question_set=question_set,
             filters=req.filters,
             top_k=req.top_k,

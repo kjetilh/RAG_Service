@@ -7,6 +7,7 @@ class ChatRequest(BaseModel):
     filters: Optional[Dict[str, Any]] = None
     top_k: Optional[int] = None
     model_profile: Optional[str] = Field(default=None, min_length=1, max_length=64)
+    prompt_profile_case_id: Optional[str] = Field(default=None, min_length=1, max_length=80)
 
 
 class QueryRequest(BaseModel):
@@ -16,6 +17,7 @@ class QueryRequest(BaseModel):
     filters: Optional[Dict[str, Any]] = None
     top_k: Optional[int] = None
     model_profile: Optional[str] = Field(default=None, min_length=1, max_length=64)
+    prompt_profile_case_id: Optional[str] = Field(default=None, min_length=1, max_length=80)
 
 class Citation(BaseModel):
     doc_id: str

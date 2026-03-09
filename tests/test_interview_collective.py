@@ -103,6 +103,7 @@ def test_build_collective_summary_runs_each_question():
 
     summary = build_collective_summary(
         case_id="innovasjon_intervjuer",
+        prompt_profile_case_id="innovasjon_bokskriving",
         question_set=prepared,
         filters={"source_type": ["innovasjon_intervju_transcript"]},
         top_k=10,
@@ -112,6 +113,7 @@ def test_build_collective_summary_runs_each_question():
 
     assert len(captured) == 2
     assert all(req.case_id == "innovasjon_intervjuer" for req in captured)
+    assert all(req.prompt_profile_case_id == "innovasjon_bokskriving" for req in captured)
     assert all(req.model_profile == "gpt-4o-mini" for req in captured)
     assert all(req.filters["source_type"] == ["innovasjon_intervju_transcript"] for req in captured)
     assert summary.question_count == 2
@@ -133,6 +135,7 @@ def test_build_collective_summary_captures_per_question_errors():
 
     summary = build_collective_summary(
         case_id="innovasjon_intervjuer",
+        prompt_profile_case_id=None,
         question_set=prepared,
         filters=None,
         top_k=None,
@@ -163,6 +166,7 @@ def test_interviews_collective_summary_route_delegates(monkeypatch):
         captured.update(kwargs)
         return build_collective_summary(
             case_id=kwargs["case_id"],
+            prompt_profile_case_id=kwargs["prompt_profile_case_id"],
             question_set=kwargs["question_set"],
             filters=kwargs["filters"],
             top_k=kwargs["top_k"],
@@ -175,11 +179,13 @@ def test_interviews_collective_summary_route_delegates(monkeypatch):
     response = routes_interviews.interviews_collective_summary(
         CollectiveSummaryRequest(
             case_id="innovasjon_intervjuer",
+            prompt_profile_case_id="innovasjon_bokskriving",
             questions=[InterviewQuestion(question_id="Q1", text="A")],
             top_k=12,
             model_profile="gpt-4o-mini",
         )
     )
     assert captured["case_id"] == "innovasjon_intervjuer"
+    assert captured["prompt_profile_case_id"] == "innovasjon_bokskriving"
     assert response.question_set_id == "set-1"
     assert response.succeeded_count == 1
