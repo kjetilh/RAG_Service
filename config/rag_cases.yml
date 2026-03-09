@@ -39,3 +39,41 @@ cases:
       min_unique_docs: 1
       min_avg_score: 0.0
       enforce: false
+  - case_id: innovasjon_intervjuer
+    description: Lederintervjuer for bokprosjektet (kollektiv mening per fast spørsmål).
+    enabled: true
+    planner:
+      docs_source_types: ["innovasjon_intervju_transcript"]
+      prompts_source_types: []
+      docs_keywords: ["intervju", "leder", "spørsmål", "svar", "kultur", "barriere", "drivkraft", "måling"]
+      prompt_keywords: []
+      default_domain: docs
+    retrieval:
+      top_k_vector: 60
+      top_k_lexical: 60
+      top_k_final: 14
+      max_chunks_per_doc: 4
+    evaluation:
+      min_citations: 3
+      min_unique_docs: 2
+      min_avg_score: 0.0
+      enforce: false
+  - case_id: innovasjon_bokskriving
+    description: Skrivehjelp for innovasjonsledelse-boka med artikler og intervju-transkripsjoner i samme case.
+    enabled: true
+    planner:
+      docs_source_types: ["innovasjonsledelse", "immovasjonsfag", "innovasjon_intervju_transcript"]
+      prompts_source_types: []
+      docs_keywords: ["bok", "kapittel", "manus", "skriv", "skriving", "skrivehjelp", "innovasjonspolitikk", "virkemiddel", "virkemidler", "intervju", "syntese", "drøfting", "analyse", "empiri"]
+      prompt_keywords: []
+      default_domain: docs
+    retrieval:
+      top_k_vector: 70
+      top_k_lexical: 70
+      top_k_final: 16
+      max_chunks_per_doc: 4
+    evaluation:
+      min_citations: 4
+      min_unique_docs: 2
+      min_avg_score: 0.0
+      enforce: false

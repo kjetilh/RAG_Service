@@ -15,6 +15,12 @@ from sqlalchemy import text
 
 from app.api.routes_chat import _run_query
 from app.models.schemas import QueryRequest, QueryResponse
+from app.rag.interviews.collective import (
+    CollectiveSummaryResponse,
+    InterviewQuestion,
+    build_collective_summary,
+    prepare_question_set,
+)
 from app.rag.access.control import (
     ROLE_ORDER,
     case_exists,
@@ -28,7 +34,7 @@ from app.rag.access.control import (
 )
 from app.rag.audit.coverage_report import resolve_existing_file
 from app.rag.cases.loader import case_by_id, load_rag_cases
-from app.rag.generate.llm_provider import ModelProfileError
+from app.rag.generate.llm_provider import ModelProfileError, validate_model_profile
 from app.rag.index.db import engine
 from app.settings import settings
 
@@ -106,6 +112,15 @@ class LinkGraphResponse(BaseModel):
     doc_count: int
     edge_count: int
     items: list[LinkEdge]
+
+
+class CellCollectiveSummaryRequest(BaseModel):
+    question_set_path: str | None = None
+    question_set_id: str | None = None
+    questions: list[InterviewQuestion] | None = None
+    filters: dict[str, Any] | None = None
+    top_k: int | None = None
+    model_profile: str | None = None
 
 
 def _resolve_identity(
@@ -417,6 +432,38 @@ def cell_query(case_id: str, req: QueryRequest, identity: CellIdentity = Depends
             trace=trace,
         )
     except ModelProfileError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/v1/cell/cases/{case_id}/interviews/collective-summary", response_model=CollectiveSummaryResponse)
+def cell_collective_summary(
+    case_id: str,
+    req: CellCollectiveSummaryRequest,
+    identity: CellIdentity = Depends(_resolve_identity),
+):
+    _require_role(case_id, identity, "viewer")
+    try:
+        validate_model_profile(req.model_profile)
+        question_set = prepare_question_set(
+            inline_questions=req.questions,
+            question_set_path=req.question_set_path,
+            question_set_id=req.question_set_id,
+        )
+        return build_collective_summary(
+            case_id=case_id,
+            question_set=question_set,
+            filters=req.filters,
+            top_k=req.top_k,
+            model_profile=req.model_profile,
+            run_query_fn=_run_query,
+        )
+    except ModelProfileError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except HTTPException:
         raise

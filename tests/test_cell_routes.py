@@ -4,6 +4,7 @@ from fastapi import HTTPException
 from app.api import routes_cell
 from app.models.schemas import ChatResponse, Citation, QueryRequest
 from app.rag.access.control import CaseMember
+from app.rag.interviews.collective import InterviewQuestion, PreparedQuestionSet
 from app.settings import settings
 
 
@@ -149,3 +150,61 @@ def test_member_upsert_persists_for_owner(monkeypatch):
 def test_markdown_link_extraction():
     links = routes_cell._extract_md_links("See [Guide](./guide.md) and [Site](https://example.com).")
     assert links == [("Guide", "./guide.md"), ("Site", "https://example.com")]
+
+
+def test_cell_collective_summary_enforces_viewer_role(monkeypatch):
+    settings.cell_access_control_enabled = True
+    monkeypatch.setattr(routes_cell, "case_exists", lambda _case_id: True)
+    monkeypatch.setattr(routes_cell, "has_case_role", lambda *_args: False)
+
+    with pytest.raises(HTTPException) as exc:
+        routes_cell.cell_collective_summary(
+            "innovasjon_intervjuer",
+            routes_cell.CellCollectiveSummaryRequest(
+                questions=[InterviewQuestion(question_id="Q1", text="Hva er hovedtrekkene?")]
+            ),
+            identity=routes_cell.CellIdentity(user_id="u2"),
+        )
+    assert exc.value.status_code == 403
+
+
+def test_cell_collective_summary_delegates_with_forced_case(monkeypatch):
+    monkeypatch.setattr(routes_cell, "_require_role", lambda *_args: "viewer")
+    monkeypatch.setattr(routes_cell, "validate_model_profile", lambda _profile: None)
+
+    prepared = PreparedQuestionSet(
+        question_set_id="set-1",
+        source="inline",
+        source_path=None,
+        questions=[InterviewQuestion(question_id="Q1", text="Hva er hovedtrekkene?")],
+    )
+    monkeypatch.setattr(routes_cell, "prepare_question_set", lambda **_kwargs: prepared)
+
+    captured = {}
+
+    def _fake_build(**kwargs):
+        captured.update(kwargs)
+        return routes_cell.CollectiveSummaryResponse(
+            case_id=kwargs["case_id"],
+            question_set_id="set-1",
+            question_count=1,
+            succeeded_count=1,
+            failed_count=0,
+            items=[],
+        )
+
+    monkeypatch.setattr(routes_cell, "build_collective_summary", _fake_build)
+
+    resp = routes_cell.cell_collective_summary(
+        "innovasjon_intervjuer",
+        routes_cell.CellCollectiveSummaryRequest(
+            question_set_id="set-1",
+            questions=[InterviewQuestion(question_id="Q1", text="Hva er hovedtrekkene?")],
+            top_k=8,
+            model_profile="gpt-4o-mini",
+        ),
+        identity=routes_cell.CellIdentity(user_id="u1"),
+    )
+    assert captured["case_id"] == "innovasjon_intervjuer"
+    assert captured["top_k"] == 8
+    assert resp.question_set_id == "set-1"

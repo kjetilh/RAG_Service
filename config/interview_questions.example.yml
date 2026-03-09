@@ -1,0 +1,14 @@
+version: 1
+question_set_id: innovasjonsledelse_lederintervju_v1
+language: nb
+questions:
+  - question_id: Q1
+    text: "Hvilke drivkrefter opplever du som viktigst for innovasjon i din virksomhet?"
+  - question_id: Q2
+    text: "Hva opplever du som de største hindringene for innovasjon?"
+  - question_id: Q3
+    text: "Hvordan balanserer dere kortsiktig drift mot langsiktig innovasjon?"
+  - question_id: Q4
+    text: "Hvilken rolle spiller ledelsen i å skape innovasjonskultur?"
+  - question_id: Q5
+    text: "Hvordan måler dere effekt av innovasjonstiltak?"

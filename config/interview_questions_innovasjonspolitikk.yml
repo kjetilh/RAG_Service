@@ -1,0 +1,22 @@
+version: 1
+question_set_id: innovasjonspolitikk_virkemidler_v1
+language: nb
+questions:
+  - question_id: Q1
+    text: "Hvordan vil du beskrive hovedtrekkene i dagens innovasjonspolitikk i Norge – hva er den egentlig designet for å oppnå, og hva er de viktigste styrkene og svakhetene?"
+  - question_id: Q2
+    text: "Hva betyr helhetlig innovasjonspolitikk i praksis – og hvor godt henger mål, virkemidler og faktiske resultater sammen i dag?"
+  - question_id: Q3
+    text: "I hvilken grad treffer dagens virkemidler behovene til bedrifter i ulike faser av innovasjonsprosessen – fra idé til skalering?"
+  - question_id: Q4
+    text: "Hvilke typer innovasjon legger dagens politikk og virkemidler best til rette for – og hvilke former for innovasjon blir systematisk underprioritert?"
+  - question_id: Q5
+    text: "Kan du peke på konkrete eksempler der innovasjonspolitikken eller virkemidlene ikke har fungert etter intensjonen, og hva som kunne vært gjort annerledes?"
+  - question_id: Q6
+    text: "Hvis Norge skulle designe en helt ny innovasjonspolitikk fra bunnen av i dag – hva ville vært fundamentalt annerledes?"
+  - question_id: Q7
+    text: "Hvis du hadde mulighet til å endre eller videreutvikle ett sentralt virkemiddel eller prinsipp i dagens innovasjonspolitikk, hva ville du valgt – og hvorfor?"
+  - question_id: Q8
+    text: "Hva hindrer oftest at gode politiske intensjoner faktisk blir til reell innovasjon og omstilling i virksomheter?"
+  - question_id: Q9
+    text: "Hvis du bare kunne gjøre ett grep nå for å styrke Norges innovasjonsevne de neste 10 årene – hva ville det vært?"
