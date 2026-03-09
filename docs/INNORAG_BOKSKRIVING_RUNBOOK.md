@@ -50,7 +50,7 @@ curl -s -X POST http://127.0.0.1:8101/v1/admin/sync \
   -H "Content-Type: application/json" \
   -H "X-API-Key: $RAG_INNOVASJON_ADMIN_API_KEY" \
   -d '{
-    "path": "intervjuer/live",
+    "path": "interviews/live",
     "source_type": "innovasjon_intervju_transcript",
     "delete_missing": true
   }'
@@ -90,17 +90,55 @@ curl -s -X POST http://127.0.0.1:8101/v1/query \
   }'
 ```
 
-## Valgfri promptprofil for bokskriving
+## Promptprofil for bokskriving
 
-Hvis du vil sette `innorag` i en tydeligere bokskrivingsmodus, finnes disse filene:
+`innorag` kan styres med runtime-global promptprofil per instans.
+
+Anbefalte filer for bokprosjektet:
 
 - `prompts/system_persona_bokskriving.md`
 - `prompts/answer_template_bokskriving.md`
+
+Sjekk aktiv konfig:
+
+```bash
+curl -s http://127.0.0.1:8101/v1/admin/prompt-config \
+  -H "X-API-Key: $RAG_INNOVASJON_ADMIN_API_KEY"
+```
+
+Sett bokskrivingsprofil:
+
+```bash
+curl -s -X PUT http://127.0.0.1:8101/v1/admin/prompt-config \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: $RAG_INNOVASJON_ADMIN_API_KEY" \
+  -d '{
+    "system_persona_path": "/app/prompts/system_persona_bokskriving.md",
+    "answer_template_path": "/app/prompts/answer_template_bokskriving.md",
+    "updated_by": "ops",
+    "change_note": "Settet bokskrivingsprofil for innorag"
+  }'
+```
+
+Bytt tilbake til instansens env-default:
+
+```bash
+curl -s -X PUT http://127.0.0.1:8101/v1/admin/prompt-config \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: $RAG_INNOVASJON_ADMIN_API_KEY" \
+  -d '{
+    "system_persona_path": null,
+    "answer_template_path": null,
+    "updated_by": "ops",
+    "change_note": "Tilbake til env-default"
+  }'
+```
 
 Viktig:
 
 - promptvalg i dagens tjeneste er runtime-globalt per instans, ikke per case
 - hvis du bytter disse inn pa `innorag`, gjelder det hele innovasjonstjenesten til du bytter tilbake
+- for ren intervjuanalyse blir svarene ryddigst hvis du midlertidig setter `system_persona_interview.md` + `answer_template_interview.md`
 
 ## Begrensning na
 
@@ -110,3 +148,14 @@ Den viktigste begrensningen er at promptprofil ikke velges automatisk per case. 
 - promptprofil er fortsatt per instans
 
 For ren bokskriving er dette likevel ofte akseptabelt hvis `innorag` primart brukes til bokprosjektet.
+
+## Research-tilgang
+
+Hvis du vil bruke `innorag` fra Deep Research eller andre lesende klienter, bruk research-API-et:
+
+- `GET /v1/research/cases`
+- `POST /v1/research/query`
+- `GET /v1/research/cases/{case_id}/corpus`
+- `GET /v1/research/cases/{case_id}/links`
+
+Dette krever et separat bearer-token, ikke `X-API-Key`.
