@@ -45,9 +45,10 @@ def compose_answer(
     context_chunks: Any,
     model_profile: str | None = None,
     router_instruction: str | None = None,
+    case_id: str | None = None,
 ) -> str:
-    persona = load_persona()
-    template = load_answer_template()
+    persona = load_persona(case_id=case_id)
+    template = load_answer_template(case_id=case_id)
     provider = default_provider(model_profile=model_profile)
 
     # Support both:

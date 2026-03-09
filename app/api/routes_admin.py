@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.rag.audit.coverage_report import build_coverage_actions, build_coverage_report
+from app.rag.cases.loader import case_by_id, load_rag_cases
 from app.rag.generate.prompt_config_store import (
     PromptRuntimeConfig,
     get_runtime_config,
@@ -156,6 +157,28 @@ class PromptConfigUpdateRequest(BaseModel):
     change_note: str | None = None
 
 
+class CasePromptProfileSummary(BaseModel):
+    case_id: str
+    description: str
+    enabled: bool
+    configured_system_persona_path: str | None = None
+    configured_answer_template_path: str | None = None
+    effective_system_persona_path: str
+    effective_answer_template_path: str
+    system_persona_source: str
+    answer_template_source: str
+
+
+class CasePromptProfilesResponse(BaseModel):
+    cases: list[CasePromptProfileSummary]
+
+
+class ApplyCasePromptProfileRequest(BaseModel):
+    case_id: str
+    updated_by: str | None = None
+    change_note: str | None = None
+
+
 def _normalize_optional_text(value: str | None) -> str | None:
     if value is None:
         return None
@@ -192,6 +215,25 @@ def _build_prompt_config_response(runtime_cfg: PromptRuntimeConfig) -> PromptCon
         updated_by=runtime_cfg.updated_by,
         change_note=runtime_cfg.change_note,
         updated_at=runtime_cfg.updated_at,
+    )
+
+
+def _case_prompt_summary(case_id: str, runtime_cfg: PromptRuntimeConfig) -> CasePromptProfileSummary:
+    cfg = load_rag_cases(settings.rag_cases_path)
+    selected = case_by_id(cfg, case_id)
+    system_path, answer_path, system_source, answer_source = resolve_effective_paths(runtime_cfg, case_id=case_id)
+    _prompt_file_info(system_path, "system_persona_path")
+    _prompt_file_info(answer_path, "answer_template_path")
+    return CasePromptProfileSummary(
+        case_id=selected.case_id,
+        description=selected.description,
+        enabled=bool(selected.enabled),
+        configured_system_persona_path=selected.prompt_profile.system_persona_path,
+        configured_answer_template_path=selected.prompt_profile.answer_template_path,
+        effective_system_persona_path=system_path,
+        effective_answer_template_path=answer_path,
+        system_persona_source=system_source,
+        answer_template_source=answer_source,
     )
 
 
@@ -255,6 +297,68 @@ def admin_update_prompt_config(req: PromptConfigUpdateRequest):
             answer_template_path=new_answer_override,
             updated_by=_normalize_optional_text(req.updated_by) or "admin-api",
             change_note=_normalize_optional_text(req.change_note),
+        )
+        return _build_prompt_config_response(updated)
+    except HTTPException:
+        raise
+    except SQLAlchemyError as e:
+        raise HTTPException(status_code=500, detail=f"Database error writing prompt config: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get(
+    "/v1/admin/case-prompt-profiles",
+    response_model=CasePromptProfilesResponse,
+    dependencies=[Depends(_require_admin_api_key)],
+)
+def admin_case_prompt_profiles():
+    try:
+        runtime_cfg = get_runtime_config()
+        cfg = load_rag_cases(settings.rag_cases_path)
+        items = [_case_prompt_summary(case.case_id, runtime_cfg) for case in cfg.cases]
+        return CasePromptProfilesResponse(cases=items)
+    except HTTPException:
+        raise
+    except SQLAlchemyError as e:
+        raise HTTPException(status_code=500, detail=f"Database error reading prompt config: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.put(
+    "/v1/admin/prompt-config/apply-case-profile",
+    response_model=PromptConfigResponse,
+    dependencies=[Depends(_require_admin_api_key)],
+)
+def admin_apply_case_prompt_profile(req: ApplyCasePromptProfileRequest):
+    try:
+        cfg = load_rag_cases(settings.rag_cases_path)
+        selected = case_by_id(cfg, req.case_id)
+        system_override = _normalize_optional_text(selected.prompt_profile.system_persona_path)
+        answer_override = _normalize_optional_text(selected.prompt_profile.answer_template_path)
+        if system_override is None and answer_override is None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Case '{selected.case_id}' does not define a prompt_profile.",
+            )
+
+        proposed = PromptRuntimeConfig(
+            system_persona_path=system_override,
+            answer_template_path=answer_override,
+            version=0,
+            updated_by=req.updated_by,
+            change_note=req.change_note,
+            updated_at=None,
+        )
+        _build_prompt_config_response(proposed)
+
+        updated = upsert_runtime_config(
+            system_persona_path=system_override,
+            answer_template_path=answer_override,
+            updated_by=_normalize_optional_text(req.updated_by) or "admin-api",
+            change_note=_normalize_optional_text(req.change_note)
+            or f"Apply prompt_profile from case '{selected.case_id}'",
         )
         return _build_prompt_config_response(updated)
     except HTTPException:

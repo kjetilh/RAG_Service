@@ -8,13 +8,14 @@ from typing import Literal
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.rag.cases.loader import case_by_id, load_rag_cases
 from app.rag.index.db import engine
 from app.settings import settings
 
 DEFAULT_SYSTEM_PERSONA_PATH = "prompts/system_persona.md"
 DEFAULT_ANSWER_TEMPLATE_PATH = "prompts/answer_template.md"
 
-PromptSource = Literal["db", "env", "default"]
+PromptSource = Literal["case", "db", "env", "default"]
 
 
 @dataclass
@@ -74,21 +75,37 @@ def get_runtime_config() -> PromptRuntimeConfig:
             updated_by=None,
             change_note=None,
             updated_at=None,
-        )
+    )
     return _runtime_config_from_mapping(row)
+
+
+def _case_prompt_paths(case_id: str | None) -> tuple[str | None, str | None]:
+    if not case_id:
+        return None, None
+    cfg = load_rag_cases(settings.rag_cases_path)
+    selected_case = case_by_id(cfg, case_id)
+    return (
+        _normalize_optional_path(selected_case.prompt_profile.system_persona_path),
+        _normalize_optional_path(selected_case.prompt_profile.answer_template_path),
+    )
 
 
 def resolve_effective_paths(
     runtime_cfg: PromptRuntimeConfig | None = None,
+    case_id: str | None = None,
 ) -> tuple[str, str, PromptSource, PromptSource]:
     cfg = runtime_cfg or get_runtime_config()
+    case_system, case_answer = _case_prompt_paths(case_id)
 
     env_system = (settings.system_persona_path or "").strip()
     env_answer = (settings.answer_template_path or "").strip()
 
-    if cfg.system_persona_path:
+    if case_system:
+        system_path = case_system
+        system_source: PromptSource = "case"
+    elif cfg.system_persona_path:
         system_path = cfg.system_persona_path
-        system_source: PromptSource = "db"
+        system_source = "db"
     elif env_system:
         system_path = env_system
         system_source = "env"
@@ -96,9 +113,12 @@ def resolve_effective_paths(
         system_path = DEFAULT_SYSTEM_PERSONA_PATH
         system_source = "default"
 
-    if cfg.answer_template_path:
+    if case_answer:
+        answer_path = case_answer
+        answer_source: PromptSource = "case"
+    elif cfg.answer_template_path:
         answer_path = cfg.answer_template_path
-        answer_source: PromptSource = "db"
+        answer_source = "db"
     elif env_answer:
         answer_path = env_answer
         answer_source = "env"

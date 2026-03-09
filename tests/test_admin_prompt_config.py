@@ -2,7 +2,8 @@ import pytest
 from fastapi import HTTPException
 
 from app.api import routes_admin
-from app.api.routes_admin import PromptConfigUpdateRequest
+from app.api.routes_admin import ApplyCasePromptProfileRequest, PromptConfigUpdateRequest
+from app.rag.cases.loader import PlannerConfig, PromptProfileConfig, RagCase, RagCasesConfig
 from app.rag.generate.prompt_config_store import PromptRuntimeConfig
 from app.settings import settings
 
@@ -90,3 +91,105 @@ def test_admin_prompt_config_put_updates_paths(monkeypatch):
     assert captured["updated_by"] == "admin-cell"
     assert captured["change_note"] == "new profile"
     assert resp.version == 1
+
+
+def test_admin_case_prompt_profiles_returns_case_summary(monkeypatch):
+    monkeypatch.setattr(
+        routes_admin,
+        "get_runtime_config",
+        lambda: PromptRuntimeConfig(None, None, 0, None, None, None),
+    )
+    monkeypatch.setattr(
+        routes_admin,
+        "load_rag_cases",
+        lambda _path: RagCasesConfig(
+            version=1,
+            default_case="innovasjon_bokskriving",
+            cases=[
+                RagCase(
+                    case_id="innovasjon_bokskriving",
+                    description="bok",
+                    enabled=True,
+                    planner=PlannerConfig(),
+                    prompt_profile=PromptProfileConfig(
+                        system_persona_path="prompts/system_persona_bokskriving.md",
+                        answer_template_path="prompts/answer_template_bokskriving.md",
+                    ),
+                )
+            ],
+        ),
+    )
+    monkeypatch.setattr(
+        routes_admin,
+        "resolve_effective_paths",
+        lambda cfg=None, case_id=None: (
+            "prompts/system_persona_bokskriving.md",
+            "prompts/answer_template_bokskriving.md",
+            "case",
+            "case",
+        ),
+    )
+    monkeypatch.setattr(routes_admin, "_prompt_file_info", lambda path, label: (f"/abs/{path}", 111))
+
+    resp = routes_admin.admin_case_prompt_profiles()
+    assert len(resp.cases) == 1
+    assert resp.cases[0].case_id == "innovasjon_bokskriving"
+    assert resp.cases[0].system_persona_source == "case"
+
+
+def test_admin_apply_case_prompt_profile_uses_case_prompt_paths(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(
+        routes_admin,
+        "load_rag_cases",
+        lambda _path: RagCasesConfig(
+            version=1,
+            default_case="innovasjon_intervjuer",
+            cases=[
+                RagCase(
+                    case_id="innovasjon_intervjuer",
+                    description="intervju",
+                    enabled=True,
+                    planner=PlannerConfig(),
+                    prompt_profile=PromptProfileConfig(
+                        system_persona_path="prompts/system_persona_interview.md",
+                        answer_template_path="prompts/answer_template_interview.md",
+                    ),
+                )
+            ],
+        ),
+    )
+    monkeypatch.setattr(
+        routes_admin,
+        "resolve_effective_paths",
+        lambda cfg=None, case_id=None: (
+            cfg.system_persona_path or "prompts/system_persona.md",
+            cfg.answer_template_path or "prompts/answer_template.md",
+            "db" if cfg and cfg.system_persona_path else "default",
+            "db" if cfg and cfg.answer_template_path else "default",
+        ),
+    )
+    monkeypatch.setattr(routes_admin, "_prompt_file_info", lambda path, label: (f"/abs/{path}", 222))
+
+    def _fake_upsert(*, system_persona_path, answer_template_path, updated_by, change_note):
+        captured["system_persona_path"] = system_persona_path
+        captured["answer_template_path"] = answer_template_path
+        captured["updated_by"] = updated_by
+        captured["change_note"] = change_note
+        return PromptRuntimeConfig(
+            system_persona_path=system_persona_path,
+            answer_template_path=answer_template_path,
+            version=2,
+            updated_by=updated_by,
+            change_note=change_note,
+            updated_at=None,
+        )
+
+    monkeypatch.setattr(routes_admin, "upsert_runtime_config", _fake_upsert)
+
+    resp = routes_admin.admin_apply_case_prompt_profile(
+        ApplyCasePromptProfileRequest(case_id="innovasjon_intervjuer", updated_by="ui")
+    )
+    assert captured["system_persona_path"] == "prompts/system_persona_interview.md"
+    assert captured["answer_template_path"] == "prompts/answer_template_interview.md"
+    assert resp.effective_system_persona_path == "prompts/system_persona_interview.md"

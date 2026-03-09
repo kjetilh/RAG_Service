@@ -134,3 +134,27 @@ cases:
     cfg = load_rag_cases(p)
     with pytest.raises(ValueError):
         case_by_id(cfg, "unknown")
+
+
+def test_load_rag_cases_accepts_prompt_profile(tmp_path: Path):
+    p = _write(
+        tmp_path,
+        """
+version: 1
+default_case: docs
+cases:
+  - case_id: docs
+    planner:
+      docs_source_types: []
+      prompts_source_types: []
+      docs_keywords: []
+      prompt_keywords: []
+      default_domain: docs
+    prompt_profile:
+      system_persona_path: "prompts/system_persona_interview.md"
+      answer_template_path: "prompts/answer_template_interview.md"
+""",
+    )
+    cfg = load_rag_cases(p)
+    assert cfg.cases[0].prompt_profile.system_persona_path == "prompts/system_persona_interview.md"
+    assert cfg.cases[0].prompt_profile.answer_template_path == "prompts/answer_template_interview.md"

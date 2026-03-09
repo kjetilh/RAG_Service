@@ -86,6 +86,7 @@ def answer_question(
             packed,
             model_profile=model_profile,
             router_instruction=plan.prompt_instruction,
+            case_id=plan.case_id,
         )
 
     # Grounding gate (optional but recommended)

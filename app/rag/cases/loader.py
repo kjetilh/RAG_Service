@@ -55,6 +55,13 @@ class EvaluationConfig(BaseModel):
     enforce: bool = False
 
 
+class PromptProfileConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    system_persona_path: str | None = Field(default=None, min_length=1)
+    answer_template_path: str | None = Field(default=None, min_length=1)
+
+
 class RagCase(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -62,6 +69,7 @@ class RagCase(BaseModel):
     description: str = ""
     enabled: bool = True
     planner: PlannerConfig
+    prompt_profile: PromptProfileConfig = Field(default_factory=PromptProfileConfig)
     retrieval: RetrievalConfig = Field(default_factory=RetrievalConfig)
     evaluation: EvaluationConfig = Field(default_factory=EvaluationConfig)
 

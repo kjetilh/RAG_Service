@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="no">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Prompt Admin</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f5f1e8;
+      --panel: #fffdf8;
+      --ink: #1f1d1a;
+      --muted: #6f6a63;
+      --line: #d8cfbf;
+      --accent: #8b5e3c;
+      --accent-2: #244f46;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Georgia, "Iowan Old Style", serif; background: var(--bg); color: var(--ink); }
+    header { padding: 20px 24px; border-bottom: 1px solid var(--line); background: linear-gradient(135deg, #efe7d8, #f8f4ec); }
+    h1 { margin: 0 0 6px; font-size: 24px; }
+    p { margin: 0; color: var(--muted); }
+    main { max-width: 1100px; margin: 0 auto; padding: 24px; display: grid; gap: 18px; }
+    .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 18px; box-shadow: 0 10px 30px rgba(0,0,0,0.04); }
+    .grid { display: grid; gap: 12px; grid-template-columns: 1.1fr 0.9fr; }
+    @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+    label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+    input { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; font-size: 14px; }
+    button { appearance: none; border: 0; border-radius: 999px; background: var(--accent); color: white; padding: 10px 16px; font-size: 14px; cursor: pointer; }
+    button.alt { background: var(--accent-2); }
+    button.ghost { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; white-space: pre-wrap; }
+    .status { display: inline-block; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 10px 8px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); font-size: 14px; }
+    th { color: var(--muted); font-weight: 600; }
+    .small { font-size: 12px; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Prompt Admin</h1>
+    <p>Inspeksjon og bytte av promptprofiler for RAG-instansen, inkludert case-profiler.</p>
+  </header>
+
+  <main>
+    <section class="panel">
+      <div class="row" style="justify-content: space-between;">
+        <strong>Tilkobling</strong>
+        <span class="status" id="status">klar</span>
+      </div>
+      <div class="grid" style="margin-top: 12px;">
+        <div>
+          <label for="base">API-base</label>
+          <input id="base" value="" />
+        </div>
+        <div>
+          <label for="apiKey">Admin API key</label>
+          <input id="apiKey" type="password" />
+        </div>
+      </div>
+      <div class="row" style="margin-top: 12px;">
+        <button id="refresh">Last status</button>
+        <button class="ghost" id="clearOverride">Til env-default</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <strong>Aktiv runtime-konfig</strong>
+      <div class="mono" id="runtimeBox" style="margin-top: 10px;">Ikke lastet.</div>
+    </section>
+
+    <section class="panel">
+      <div class="row" style="justify-content: space-between;">
+        <strong>Case-profiler</strong>
+        <span class="small">"Aktiver på instans" setter DB-override til valgt caseprofil.</span>
+      </div>
+      <table style="margin-top: 12px;">
+        <thead>
+          <tr>
+            <th>Case</th>
+            <th>Konfigurert profil</th>
+            <th>Effektiv profil</th>
+            <th>Handling</th>
+          </tr>
+        </thead>
+        <tbody id="casesBody"></tbody>
+      </table>
+    </section>
+
+    <section class="panel">
+      <strong>Logg</strong>
+      <div class="mono" id="logBox" style="margin-top: 10px;"></div>
+    </section>
+  </main>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const baseInput = $("base");
+    const apiKeyInput = $("apiKey");
+    const statusEl = $("status");
+    const runtimeBox = $("runtimeBox");
+    const casesBody = $("casesBody");
+    const logBox = $("logBox");
+
+    baseInput.value = window.location.origin;
+
+    function setStatus(text) {
+      statusEl.textContent = text;
+    }
+
+    function log(line) {
+      const stamp = new Date().toLocaleTimeString("no-NO");
+      logBox.textContent = `[${stamp}] ${line}\n` + logBox.textContent;
+    }
+
+    function headers() {
+      const key = apiKeyInput.value.trim();
+      if (!key) throw new Error("Admin API key mangler.");
+      return {
+        "Content-Type": "application/json",
+        "X-API-Key": key,
+      };
+    }
+
+    async function getJson(path) {
+      const res = await fetch(baseInput.value.replace(/\/$/, "") + path, { headers: headers() });
+      const text = await res.text();
+      if (!res.ok) throw new Error(text || `HTTP ${res.status}`);
+      return JSON.parse(text);
+    }
+
+    async function putJson(path, body) {
+      const res = await fetch(baseInput.value.replace(/\/$/, "") + path, {
+        method: "PUT",
+        headers: headers(),
+        body: JSON.stringify(body),
+      });
+      const text = await res.text();
+      if (!res.ok) throw new Error(text || `HTTP ${res.status}`);
+      return JSON.parse(text);
+    }
+
+    function renderRuntime(data) {
+      runtimeBox.textContent = JSON.stringify(data, null, 2);
+    }
+
+    function renderCases(data) {
+      casesBody.innerHTML = "";
+      for (const item of data.cases || []) {
+        const tr = document.createElement("tr");
+        const configured = [
+          `system: ${item.configured_system_persona_path || "(ingen)"}`,
+          `answer: ${item.configured_answer_template_path || "(ingen)"}`,
+        ].join("\n");
+        const effective = [
+          `system (${item.system_persona_source}): ${item.effective_system_persona_path}`,
+          `answer (${item.answer_template_source}): ${item.effective_answer_template_path}`,
+        ].join("\n");
+        tr.innerHTML = `
+          <td>
+            <strong>${item.case_id}</strong>
+            <div class="small">${item.description || ""}</div>
+          </td>
+          <td class="mono">${configured}</td>
+          <td class="mono">${effective}</td>
+          <td><button data-case-id="${item.case_id}" class="applyBtn">Aktiver på instans</button></td>
+        `;
+        casesBody.appendChild(tr);
+      }
+
+      document.querySelectorAll(".applyBtn").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const caseId = btn.getAttribute("data-case-id");
+          try {
+            setStatus("oppdaterer…");
+            const resp = await putJson("/v1/admin/prompt-config/apply-case-profile", {
+              case_id: caseId,
+              updated_by: "prompt-admin-ui",
+              change_note: `Apply case profile '${caseId}' from prompt admin UI`,
+            });
+            renderRuntime(resp);
+            log(`Aktiverte caseprofil for ${caseId}.`);
+            await refreshAll();
+            setStatus("klar");
+          } catch (err) {
+            setStatus("feil");
+            log(`Feil ved aktivering av ${caseId}: ${err.message || err}`);
+          }
+        });
+      });
+    }
+
+    async function refreshAll() {
+      setStatus("laster…");
+      const [runtime, cases] = await Promise.all([
+        getJson("/v1/admin/prompt-config"),
+        getJson("/v1/admin/case-prompt-profiles"),
+      ]);
+      renderRuntime(runtime);
+      renderCases(cases);
+      log("Lastet runtime-konfig og case-profiler.");
+      setStatus("klar");
+    }
+
+    $("refresh").addEventListener("click", async () => {
+      try {
+        await refreshAll();
+      } catch (err) {
+        setStatus("feil");
+        log(`Feil ved lasting: ${err.message || err}`);
+      }
+    });
+
+    $("clearOverride").addEventListener("click", async () => {
+      try {
+        setStatus("oppdaterer…");
+        const resp = await putJson("/v1/admin/prompt-config", {
+          system_persona_path: null,
+          answer_template_path: null,
+          updated_by: "prompt-admin-ui",
+          change_note: "Clear runtime override from prompt admin UI",
+        });
+        renderRuntime(resp);
+        log("Tilbakestilte runtime override til env-default.");
+        await refreshAll();
+        setStatus("klar");
+      } catch (err) {
+        setStatus("feil");
+        log(`Feil ved nullstilling: ${err.message || err}`);
+      }
+    });
+  </script>
+</body>
+</html>

@@ -53,6 +53,9 @@ cases:
       top_k_lexical: 60
       top_k_final: 14
       max_chunks_per_doc: 4
+    prompt_profile:
+      system_persona_path: "prompts/system_persona_interview.md"
+      answer_template_path: "prompts/answer_template_interview.md"
     evaluation:
       min_citations: 3
       min_unique_docs: 2
@@ -72,6 +75,9 @@ cases:
       top_k_lexical: 70
       top_k_final: 16
       max_chunks_per_doc: 4
+    prompt_profile:
+      system_persona_path: "prompts/system_persona_bokskriving.md"
+      answer_template_path: "prompts/answer_template_bokskriving.md"
     evaluation:
       min_citations: 4
       min_unique_docs: 2

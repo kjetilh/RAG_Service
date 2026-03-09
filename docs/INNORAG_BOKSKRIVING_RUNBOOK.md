@@ -92,7 +92,10 @@ curl -s -X POST http://127.0.0.1:8101/v1/query \
 
 ## Promptprofil for bokskriving
 
-`innorag` kan styres med runtime-global promptprofil per instans.
+`innorag` har na to lag for promptvalg:
+
+- automatisk `prompt_profile` per case
+- valgfri runtime override for hele instansen
 
 Anbefalte filer for bokprosjektet:
 
@@ -136,18 +139,42 @@ curl -s -X PUT http://127.0.0.1:8101/v1/admin/prompt-config \
 
 Viktig:
 
-- promptvalg i dagens tjeneste er runtime-globalt per instans, ikke per case
-- hvis du bytter disse inn pa `innorag`, gjelder det hele innovasjonstjenesten til du bytter tilbake
+- runtime override overstyrer caseprofilene for hele instansen
+- hvis du setter runtime override pa `innorag`, gjelder det hele innovasjonstjenesten til du bytter tilbake
 - for ren intervjuanalyse blir svarene ryddigst hvis du midlertidig setter `system_persona_interview.md` + `answer_template_interview.md`
+
+## Automatisk promptvalg per case
+
+`rag_cases.yml` kan na angi `prompt_profile` per case.
+
+Det betyr at:
+
+- `innovasjon_intervjuer` automatisk bruker intervjupersona og intervjumal
+- `innovasjon_bokskriving` automatisk bruker bokskrivingspersona og bokskrivingsmal
+
+Dette gjelder ved vanlig bruk av `case_id` i `/v1/query`, `/v1/research/query` og intervjuendepunktet.
+
+## Prompt Admin-side
+
+For inspeksjon og bytte uten manuelle `curl`-kall finnes en enkel admin-side:
+
+- `/prompt-admin`
+
+Siden bruker `X-API-Key` som du skriver inn i UI-et, og kan:
+
+- vise aktiv runtime-konfig
+- vise effektive promptprofiler per case
+- sette runtime override til en valgt caseprofil
+- nullstille tilbake til env-default
 
 ## Begrensning na
 
-Den viktigste begrensningen er at promptprofil ikke velges automatisk per case. Det betyr:
+Den viktigste begrensningen er at runtime override fortsatt er instans-global. Det betyr:
 
-- case-seleksjon er per request
-- promptprofil er fortsatt per instans
+- case-seleksjon styrer automatisk promptprofil sa lenge runtime override er `null`
+- hvis du setter runtime override, brukes den pa tvers av alle cases
 
-For ren bokskriving er dette likevel ofte akseptabelt hvis `innorag` primart brukes til bokprosjektet.
+For daglig bokarbeid er dette ofte tilstrekkelig, men pa sikt bor promptvalg kunne overstyres per request ved behov.
 
 ## Research-tilgang
 

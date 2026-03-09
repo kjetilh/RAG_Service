@@ -39,3 +39,36 @@ def test_missing_prompt_file_raises_error():
 
     with pytest.raises(FileNotFoundError):
         load_persona()
+
+
+def test_load_persona_from_case_profile(tmp_path: Path):
+    original_rag_cases_path = settings.rag_cases_path
+    try:
+        persona_file = tmp_path / "persona.md"
+        template_file = tmp_path / "template.md"
+        cases_file = tmp_path / "cases.yml"
+        persona_file.write_text("case persona", encoding="utf-8")
+        template_file.write_text("case template", encoding="utf-8")
+        cases_file.write_text(
+            f"""
+version: 1
+default_case: docs
+cases:
+  - case_id: docs
+    planner:
+      docs_source_types: []
+      prompts_source_types: []
+      docs_keywords: []
+      prompt_keywords: []
+      default_domain: docs
+    prompt_profile:
+      system_persona_path: "{persona_file}"
+      answer_template_path: "{template_file}"
+""",
+            encoding="utf-8",
+        )
+        settings.rag_cases_path = str(cases_file)
+        assert load_persona(case_id="docs") == "case persona"
+        assert load_answer_template(case_id="docs") == "case template"
+    finally:
+        settings.rag_cases_path = original_rag_cases_path
