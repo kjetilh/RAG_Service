@@ -73,21 +73,25 @@ def _filters_with_case(filters: dict | None, case_id: str | None) -> dict:
     return out
 
 
-def _run_query(req: QueryRequest):
-    validate_model_profile(req.model_profile)
+def _validate_case_visibility(case_id: str | None, prompt_profile_case_id: str | None) -> None:
     cfg = load_rag_cases(settings.rag_cases_path)
     visible_ids = visible_case_ids(cfg)
-    if req.case_id:
-        if req.case_id not in visible_ids:
-            raise HTTPException(status_code=404, detail=f"Case is not available on this instance: {req.case_id}")
-        case_by_id(cfg, req.case_id)
-    if req.prompt_profile_case_id:
-        if req.prompt_profile_case_id not in visible_ids:
+    if case_id:
+        if case_id not in visible_ids:
+            raise HTTPException(status_code=404, detail=f"Case is not available on this instance: {case_id}")
+        case_by_id(cfg, case_id)
+    if prompt_profile_case_id:
+        if prompt_profile_case_id not in visible_ids:
             raise HTTPException(
                 status_code=404,
-                detail=f"Prompt profile case is not available on this instance: {req.prompt_profile_case_id}",
+                detail=f"Prompt profile case is not available on this instance: {prompt_profile_case_id}",
             )
-        case_by_id(cfg, req.prompt_profile_case_id)
+        case_by_id(cfg, prompt_profile_case_id)
+
+
+def _run_query(req: QueryRequest):
+    validate_model_profile(req.model_profile)
+    _validate_case_visibility(req.case_id, req.prompt_profile_case_id)
     return answer_question(
         message=req.query,
         conversation_id=req.conversation_id,
@@ -129,6 +133,8 @@ def query(req: QueryRequest):
         )
     except ModelProfileError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -152,6 +158,8 @@ def chat(req: ChatRequest):
         )
     except ModelProfileError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -167,6 +175,7 @@ def chat_stream(req: ChatRequest):
     """
     try:
         validate_model_profile(req.model_profile)
+        _validate_case_visibility(req.case_id, req.prompt_profile_case_id)
         gen = answer_question_stream(
             message=req.message,
             conversation_id=req.conversation_id,
@@ -178,6 +187,8 @@ def chat_stream(req: ChatRequest):
         return StreamingResponse(gen, media_type="text/event-stream")
     except ModelProfileError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

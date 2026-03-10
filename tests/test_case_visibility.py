@@ -82,6 +82,36 @@ def test_chat_query_rejects_case_not_available_on_instance(monkeypatch):
     assert exc.value.status_code == 404
 
 
+def test_query_route_preserves_hidden_case_404(monkeypatch):
+    settings.instance_case_ids_json = '["innovasjon"]'
+    monkeypatch.setattr(routes_chat, "validate_model_profile", lambda _profile: None)
+    monkeypatch.setattr(routes_chat, "load_rag_cases", lambda _path: _cfg())
+
+    with pytest.raises(HTTPException) as exc:
+        routes_chat.query(
+            routes_chat.QueryRequest(
+                query="hei",
+                case_id="dimy_docs",
+            )
+        )
+    assert exc.value.status_code == 404
+
+
+def test_chat_stream_rejects_hidden_case_before_stream(monkeypatch):
+    settings.instance_case_ids_json = '["innovasjon"]'
+    monkeypatch.setattr(routes_chat, "validate_model_profile", lambda _profile: None)
+    monkeypatch.setattr(routes_chat, "load_rag_cases", lambda _path: _cfg())
+
+    with pytest.raises(HTTPException) as exc:
+        routes_chat.chat_stream(
+            routes_chat.ChatRequest(
+                message="hei",
+                case_id="dimy_docs",
+            )
+        )
+    assert exc.value.status_code == 404
+
+
 def test_research_allowed_case_ids_respect_instance_allowlist(monkeypatch):
     settings.instance_case_ids_json = '["innovasjon","innovasjon_intervjuer"]'
     monkeypatch.setattr(routes_research, "load_rag_cases", lambda _path: _cfg())
