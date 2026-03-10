@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 import time
 import urllib.request
 from pathlib import Path
@@ -122,6 +123,10 @@ def _render_markdown(plan: dict[str, Any], results: list[dict[str, Any]]) -> str
     return "\n".join(lines)
 
 
+def _failure_count(results: list[dict[str, Any]]) -> int:
+    return sum(1 for result in results if not result.get("passed"))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url", required=True)
@@ -129,6 +134,7 @@ def main() -> None:
     parser.add_argument("--output-md", default="")
     parser.add_argument("--output-json", default="")
     parser.add_argument("--top-k", type=int, default=6)
+    parser.add_argument("--fail-on-failures", action="store_true")
     args = parser.parse_args()
 
     plan = _load_plan(Path(args.plan))
@@ -151,6 +157,8 @@ def main() -> None:
     if args.output_md:
         Path(args.output_md).write_text(markdown, encoding="utf-8")
     print(markdown)
+    if args.fail_on_failures and _failure_count(results) > 0:
+        sys.exit(1)
 
 
 if __name__ == "__main__":

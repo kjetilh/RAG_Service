@@ -135,3 +135,14 @@ python -m scripts.run_innorag_verification \
   --output-md /tmp/innorag_verification.md \
   --output-json /tmp/innorag_verification.json
 ```
+
+For drift og automatiske kjøringer:
+
+```bash
+python -m scripts.run_innorag_verification \
+  --base-url https://innorag.haven.digipomps.org \
+  --plan config/innorag_verification_plan.yml \
+  --output-md /tmp/innorag_verification.md \
+  --output-json /tmp/innorag_verification.json \
+  --fail-on-failures
+```

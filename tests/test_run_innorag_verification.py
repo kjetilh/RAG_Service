@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from scripts.run_innorag_verification import _evaluate_check, _load_plan, _render_markdown
+from scripts.run_innorag_verification import _evaluate_check, _failure_count, _load_plan, _render_markdown
 
 
 def test_load_plan_reads_yaml(tmp_path: Path):
@@ -67,3 +67,9 @@ def test_render_markdown_contains_summary_table():
     assert "# test_plan" in markdown
     assert "| A1 | innovasjon | general | general | articles | articles | 1.2s | PASS |" in markdown
     assert "Pass-flagg" in markdown
+
+
+def test_failure_count_counts_failed_results():
+    results = [{"passed": True}, {"passed": False}, {"passed": False}]
+
+    assert _failure_count(results) == 2
