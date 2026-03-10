@@ -29,6 +29,31 @@ def test_choose_answer_mode_detects_chapter_structure_and_hybrid_strategy():
     assert plan.default_prompt_case_id == "innovasjon_bokskriving"
 
 
+def test_choose_answer_mode_keeps_interview_gap_question_in_interview_lane():
+    plan = choose_answer_mode(
+        message="Hvilke spørsmål eller temaer har svakest dekning i intervjuene, og hva mangler vi dokumentasjon på?",
+        case_id="innovasjon_bokskriving",
+        docs_source_types=["innovasjonsledelse", "immovasjonsfag", "innovasjon_intervju_transcript"],
+        selected_domain="docs",
+    )
+
+    assert plan.answer_mode == "interview_analysis"
+    assert plan.source_strategy == "interviews"
+    assert plan.streaming_allowed is False
+
+
+def test_choose_answer_mode_does_not_force_hybrid_for_interview_only_question_in_book_case():
+    plan = choose_answer_mode(
+        message="Hvilke intervjuer peker tydeligst på fragmentering i virkemiddelapparatet? Vis sitater.",
+        case_id="innovasjon_bokskriving",
+        docs_source_types=["innovasjonsledelse", "immovasjonsfag", "innovasjon_intervju_transcript"],
+        selected_domain="docs",
+    )
+
+    assert plan.source_strategy == "interviews"
+    assert plan.answer_mode == "interview_analysis"
+
+
 def test_source_types_for_strategy_splits_interviews_and_articles():
     source_types = ["innovasjonsledelse", "immovasjonsfag", "innovasjon_intervju_transcript"]
 

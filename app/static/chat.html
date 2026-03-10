@@ -69,7 +69,7 @@
     <div class="panel">
       <div class="row" style="justify-content:space-between; align-items:center;">
         <strong>Debug</strong>
-        <span class="muted mono">SSE events: citations, delta, done</span>
+        <span class="muted mono">SSE events: query_plan, status, citations, delta, done</span>
       </div>
       <div class="chatlog mono" id="debug"></div>
     </div>
@@ -226,8 +226,18 @@
             obj.streaming_allowed === false ? "ikke-stream" : "stream",
           ];
           modeEl.textContent = parts.join(" · ");
+          if (obj.streaming_allowed === false) {
+            setStatus("arbeider …");
+          }
         } catch (e) {
           logDebug("query_plan parse error: " + e);
+        }
+      } else if (ev === "status") {
+        try {
+          const obj = JSON.parse(data);
+          setStatus(obj.message || "arbeider …");
+        } catch (e) {
+          setStatus("arbeider …");
         }
       } else if (ev === "delta") {
         try {
@@ -244,16 +254,18 @@
         sendBtn.disabled = false;
         stopBtn.disabled = true;
       } else if (ev === "error") {
-  debugLog("SSE error: " + data);
-  try {
-    const obj = JSON.parse(data);
-    debugLog("SSE error parsed: " + JSON.stringify(obj, null, 2));
-    // valgfritt: vis på skjermen også
-    appendAssistantMessage("Feil: " + (obj.message || data));
-  } catch (e) {
-    appendAssistantMessage("Feil: " + data);
-  }
-}
+        debugLog("SSE error: " + data);
+        try {
+          const obj = JSON.parse(data);
+          debugLog("SSE error parsed: " + JSON.stringify(obj, null, 2));
+          answerEl.textContent = "Feil: " + (obj.message || data);
+        } catch (e) {
+          answerEl.textContent = "Feil: " + data;
+        }
+        setStatus("feil");
+        sendBtn.disabled = false;
+        stopBtn.disabled = true;
+      }
       currentEvent = null;
       dataLines = [];
     }
@@ -329,7 +341,6 @@ function debugLog(msg) {
   }
   console.log(msg);
 }
-</script>
 </script>
 </body>
 </html>

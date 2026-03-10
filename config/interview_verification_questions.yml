@@ -1,0 +1,16 @@
+version: 1
+question_set_id: innovasjon_intervju_verifisering_v1
+language: nb
+questions:
+  - question_id: IV1
+    text: "Hva er funnene pr spørsmål? Vis sitater."
+  - question_id: IV2
+    text: "Gi en oppsummering pr intervju av hovedtrekkene."
+  - question_id: IV3
+    text: "Hva er hovedtrekkene i intervjuene om innovasjonspolitikk og virkemidler?"
+  - question_id: IV4
+    text: "Hvilke spørsmål eller temaer har svakest dekning i intervjuene, og hva mangler vi dokumentasjon på?"
+  - question_id: IV5
+    text: "Hvilke intervjuer peker tydeligst på fragmentering i virkemiddelapparatet? Vis sitater."
+  - question_id: IV6
+    text: "Lag forslag til kapittelstruktur for et bokkapittel om innovasjonspolitikk og virkemidler basert på litteratur og intervjuer, og begrunn valgene."

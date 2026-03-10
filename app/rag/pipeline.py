@@ -8,29 +8,23 @@ from threading import Semaphore
 from sqlalchemy import text
 
 from app.settings import settings
-from app.models.schemas import ChatResponse, Citation, QueryRequest
+from app.models.schemas import ChatResponse, Citation
 from app.rag.index.db import engine
 from app.rag.index.embedder import default_embedder
 from app.rag.retrieve.hybrid import RetrievedChunk, hybrid_retrieve
 from app.rag.planner.answer_modes import sanitize_text_without_citations, trim_excerpt
 from app.rag.planner.deterministic import PlanResult, plan_query
 from app.rag.retrieve.rerank import default_reranker
-from app.rag.retrieve.pack_context import PackedContext, pack_context
+from app.rag.retrieve.pack_context import pack_context
 from app.rag.generate.composer import compose_answer, rewrite_query_if_enabled
 from app.rag.generate.llm_provider import LLMMessage, default_provider
 from app.rag.generate.prompt_config_store import resolve_effective_paths
-from app.rag.interviews.collective import build_collective_summary, prepare_question_set
+from app.rag.interviews.collective import prepare_question_set
 from app.rag.eval.gate import run_evaluation_gate
 from app.rag.safety.grounding import strict_grounding_check
 
 # Global throttle to avoid parallel LLM calls from the UI (double-submit / reconnect / multiple tabs).
 _LLM_SEM = Semaphore(1)
-
-_COMPACT_INTERVIEW_CONTRACT = (
-    "Svar kort og presist på spørsmålet med bare det som faktisk støttes av intervjuutdragene. "
-    "Bruk 2-4 korte avsnitt. Unngå faste seksjoner. "
-    "Vær tydelig hvis grunnlaget er svakt eller sprikende."
-)
 
 _QUERY_PLANNER_FALLBACKS = {
     "hybrid": [
@@ -40,6 +34,9 @@ _QUERY_PLANNER_FALLBACKS = {
     "articles": [{"label": "litteratur", "source_strategy": "articles"}],
     "interviews": [{"label": "intervjuer", "source_strategy": "interviews"}],
 }
+
+_STRUCTURED_ITEM_TOP_K = 4
+_STRUCTURED_ITEM_MAX_CHUNKS_PER_DOC = 2
 
 
 def _normalize_string_list(value: Any) -> list[str]:
@@ -99,6 +96,30 @@ def _detail_instruction(plan: PlanResult) -> str | None:
     )
 
 
+def _wants_quotes(message: str) -> bool:
+    message_lc = (message or "").lower()
+    return "sitat" in message_lc or "sitater" in message_lc or "vis sitater" in message_lc
+
+
+def _quote_instruction(message: str) -> str | None:
+    if not _wants_quotes(message):
+        return None
+    return (
+        "Bruk ikke anførselstegn i løpende tekst med mindre du kopierer ordrett fra CONTEXT. "
+        "Hvis brukeren ber om sitater, legg heller ved korte, dokumenterte sitater med kildereferanser i en egen sitatdel."
+    )
+
+
+def _append_documented_quotes(answer: str, citations: list[Citation], limit: int = 3) -> str:
+    selected = [citation for citation in citations if citation.excerpt][:limit]
+    if not selected:
+        return answer
+    lines = [answer.rstrip(), "", "## Dokumenterte sitater"]
+    for idx, citation in enumerate(selected, start=1):
+        lines.append(f'- [{idx}] "{trim_excerpt(citation.excerpt)}" ({citation.title})')
+    return "\n".join(lines).strip()
+
+
 def _build_query_plan(
     *,
     plan: PlanResult,
@@ -120,6 +141,29 @@ def _build_query_plan(
     if extra_fields:
         query_plan.update(extra_fields)
     return query_plan
+
+
+def _preview_query_plan(
+    *,
+    message: str,
+    filters: dict[str, Any],
+    prompt_profile_case_id: str | None,
+) -> dict[str, Any]:
+    plan = plan_query(message, filters)
+    prompt_case_id = _prompt_case_id(plan, prompt_profile_case_id)
+    prompt_system_path, prompt_answer_path, prompt_system_source, prompt_answer_source = resolve_effective_paths(
+        case_id=prompt_case_id
+    )
+    return _build_query_plan(
+        plan=plan,
+        prompt_profile_case_id=prompt_profile_case_id,
+        prompt_case_id=prompt_case_id,
+        prompt_system_path=prompt_system_path,
+        prompt_answer_path=prompt_answer_path,
+        prompt_system_source=prompt_system_source,
+        prompt_answer_source=prompt_answer_source,
+        extra_fields={"preview_only": True},
+    )
 
 
 def _retrieve_candidates(
@@ -197,6 +241,8 @@ def _render_response(
         )
 
     citations = packed.citations
+    if _wants_quotes(message):
+        answer = _append_documented_quotes(answer, citations)
     strict_grounding_check(answer, citations)
     evaluation_gate = run_evaluation_gate(citations, plan.evaluation)
     packed.debug["evaluation_gate"] = evaluation_gate
@@ -243,7 +289,7 @@ def _run_planned_single_pass(
         top_k=top_k,
         model_profile=model_profile,
         prompt_profile_case_id=prompt_profile_case_id,
-        router_instruction=router_instruction,
+        router_instruction=_merge_instruction(router_instruction, _quote_instruction(message)),
         answer_contract=answer_contract,
         extra_query_plan=query_plan_extra,
     )
@@ -413,25 +459,148 @@ def _list_documents(source_types: list[str], limit: int = 24) -> list[dict[str, 
     return [dict(row) for row in rows]
 
 
-def _render_question_matrix(summary, plan: PlanResult) -> ChatResponse:
+def _structured_item_top_k(top_k: int | None) -> int:
+    if top_k is None:
+        return _STRUCTURED_ITEM_TOP_K
+    return max(2, min(int(top_k), _STRUCTURED_ITEM_TOP_K))
+
+
+def _retrieve_structured_bundle(
+    *,
+    query: str,
+    plan: PlanResult,
+    filters: dict[str, Any],
+    top_k: int | None,
+    model_profile: str | None,
+) -> dict[str, Any]:
+    candidate_top_k = _structured_item_top_k(top_k)
+    candidates, effective_query = _retrieve_candidates(
+        query=query,
+        filters=filters,
+        retrieval=plan.retrieval,
+        model_profile=model_profile,
+        rewrite_query=False,
+        effective_top_k=candidate_top_k,
+    )
+    packed = pack_context(
+        candidates,
+        candidate_top_k,
+        max_chunks_per_doc=min(
+            _STRUCTURED_ITEM_MAX_CHUNKS_PER_DOC,
+            int(plan.retrieval.get("max_chunks_per_doc", settings.max_chunks_per_doc)),
+        ),
+    )
+    return {
+        "effective_query": effective_query,
+        "citations": list(packed.citations),
+        "debug": packed.debug or {},
+    }
+
+
+def _fallback_structured_summary(citations: list[Citation]) -> str:
+    if not citations:
+        return "Grunnlaget er svakt. Det finnes ikke nok tydelige utdrag til å oppsummere dette robust."
+    parts = [trim_excerpt(citation.excerpt, limit=180) for citation in citations[:2] if citation.excerpt]
+    return " ".join(part for part in parts if part).strip() or "Grunnlaget er svakt og krever manuell kontroll."
+
+
+def _summarize_structured_items(
+    *,
+    item_kind: str,
+    message: str,
+    items: list[dict[str, Any]],
+    model_profile: str | None,
+) -> dict[str, dict[str, Any]]:
+    if not items:
+        return {}
+
+    provider = default_provider(model_profile=model_profile)
+    prompt_items = [
+        {
+            "item_id": str(item.get("item_id") or ""),
+            "label": str(item.get("label") or ""),
+            "evidence": [
+                {
+                    "title": citation.title,
+                    "doc_id": citation.doc_id,
+                    "excerpt": trim_excerpt(citation.excerpt, limit=240),
+                }
+                for citation in list(item.get("citations") or [])[:3]
+            ],
+        }
+        for item in items
+    ]
+    system = (
+        "Du lager korte, nøkterne deloppsummeringer for et bokprosjekt. "
+        "Bruk bare evidensen du får. Ikke finn på forklaringer, sitater eller påstander. "
+        "Returner KUN gyldig JSON."
+    )
+    user = (
+        f"SPORSMAL_FRA_BRUKER: {message}\n"
+        f"ITEM_TYPE: {item_kind}\n"
+        "For hvert item skal du returnere en kort oppsummering på 2-4 setninger. "
+        "Hvis grunnlaget er svakt, si det eksplisitt. Ikke bruk referanser som [1]. "
+        "Sett coverage til high når flere utdrag peker i samme retning, medium når grunnlaget er brukbart men begrenset, "
+        "og low bare når evidensen faktisk er tynn eller sprikende.\n"
+        "Returner JSON på formen:\n"
+        '{"items":[{"item_id":"...","summary":"...","coverage":"high|medium|low","warning":"..."}]}\n\n'
+        f"EVIDENS:\n{json.dumps(prompt_items, ensure_ascii=False)}"
+    )
+
+    try:
+        with _LLM_SEM:
+            raw = provider.chat(
+                [
+                    LLMMessage(role="system", content=system),
+                    LLMMessage(role="user", content=user),
+                ]
+            )
+        payload = _extract_json_object(raw)
+    except Exception:
+        payload = None
+
+    summaries: dict[str, dict[str, Any]] = {}
+    for entry in list(payload.get("items") or []) if isinstance(payload, dict) else []:
+        if not isinstance(entry, dict):
+            continue
+        item_id = str(entry.get("item_id") or "").strip()
+        if not item_id:
+            continue
+        summaries[item_id] = {
+            "summary": str(entry.get("summary") or "").strip(),
+            "coverage": str(entry.get("coverage") or "").strip().lower() or None,
+            "warning": str(entry.get("warning") or "").strip() or None,
+        }
+
+    for item in items:
+        item_id = str(item.get("item_id") or "")
+        if item_id in summaries:
+            continue
+        summaries[item_id] = {
+            "summary": _fallback_structured_summary(list(item.get("citations") or [])),
+            "coverage": "low" if not item.get("citations") else "medium",
+            "warning": "Fallback summary used because structured extraction was incomplete.",
+        }
+    return summaries
+
+
+def _render_question_matrix(question_items: list[dict[str, Any]], plan: PlanResult, question_set_id: str) -> ChatResponse:
     citations, index_by_key = _collect_citations_registry()
     lines = ["## Funn per spørsmål"]
     item_debug: list[dict[str, Any]] = []
 
-    for item in summary.items:
+    for item in question_items:
         lines.append("")
-        lines.append(f"### {item.question_id}. {item.question}")
-        if item.status != "ok":
-            lines.append(f"Materialet ga ikke et robust svar på dette spørsmålet. Feil: {item.error}")
-            item_debug.append({"question_id": item.question_id, "status": item.status, "error": item.error})
-            continue
+        lines.append(f"### {item['question_id']}. {item['question']}")
+        if item.get("warning"):
+            lines.append(f"Vurdering av grunnlag: {item['warning']}")
 
-        cleaned_answer = sanitize_text_without_citations(item.answer or "")
+        cleaned_answer = sanitize_text_without_citations(item.get("summary") or "")
         lines.append(cleaned_answer or "Ingen tydelige funn kunne oppsummeres fra materialet.")
 
         refs: list[int] = []
         quote_lines: list[str] = []
-        for citation in list(item.citations or [])[:3]:
+        for citation in list(item.get("citations") or [])[:3]:
             ref = _register_citation(citation, citations, index_by_key)
             refs.append(ref)
             quote_lines.append(f'- [{ref}] "{trim_excerpt(citation.excerpt)}" ({citation.title})')
@@ -444,18 +613,21 @@ def _render_question_matrix(summary, plan: PlanResult) -> ChatResponse:
 
         item_debug.append(
             {
-                "question_id": item.question_id,
-                "status": item.status,
-                "citation_count": len(item.citations or []),
-                "unique_doc_count": item.unique_doc_count,
+                "question_id": item["question_id"],
+                "status": item.get("status", "ok"),
+                "citation_count": len(item.get("citations") or []),
+                "unique_doc_count": len({c.doc_id for c in list(item.get("citations") or []) if c.doc_id}),
+                "coverage": item.get("coverage"),
+                "effective_query": item.get("effective_query"),
             }
         )
 
     debug = {
         "query_plan": {
             **dict(plan.trace),
-            "structured_item_count": len(summary.items),
-            "question_set_id": summary.question_set_id,
+            "structured_item_count": len(question_items),
+            "question_set_id": question_set_id,
+            "structured_generation_mode": "retrieval_many_llm_one",
         },
         "structured_items": item_debug,
     }
@@ -474,42 +646,43 @@ def _run_collective_question_mode(
         inline_questions=None,
         question_set_path=plan.answer_mode.question_set_path if plan.answer_mode else None,
     )
-    base_filters = dict(plan.filters)
-    interview_case_id = "innovasjon_intervjuer"
+    question_items: list[dict[str, Any]] = []
 
-    def _run_query(req: QueryRequest):
-        req_filters = dict(req.filters or {})
-        if req.case_id:
-            req_filters["rag_case_id"] = req.case_id
-        subplan = plan_query(req.query, req_filters)
-        return _run_planned_single_pass(
-            message=req.query,
-            plan=subplan,
-            top_k=req.top_k,
-            model_profile=req.model_profile,
-            prompt_profile_case_id=req.prompt_profile_case_id,
-            answer_contract=_COMPACT_INTERVIEW_CONTRACT,
-            rewrite_query=False,
+    for question in question_set.questions:
+        bundle = _retrieve_structured_bundle(
+            query=question.text,
+            plan=plan,
+            filters=dict(plan.filters),
+            top_k=top_k,
+            model_profile=model_profile,
+        )
+        question_items.append(
+            {
+                "item_id": question.question_id,
+                "question_id": question.question_id,
+                "question": question.text,
+                "citations": list(bundle["citations"])[:3],
+                "effective_query": bundle["effective_query"],
+                "status": "ok" if bundle["citations"] else "weak",
+            }
         )
 
-    summary = build_collective_summary(
-        case_id=interview_case_id,
-        prompt_profile_case_id=prompt_profile_case_id or interview_case_id,
-        question_set=question_set,
-        filters=base_filters,
-        top_k=top_k,
+    summaries = _summarize_structured_items(
+        item_kind="question",
+        message=message,
+        items=question_items,
         model_profile=model_profile,
-        run_query_fn=_run_query,
     )
-    return _render_question_matrix(summary, plan)
+    for item in question_items:
+        summary = summaries.get(item["item_id"], {})
+        item["summary"] = summary.get("summary")
+        item["coverage"] = summary.get("coverage")
+        item["warning"] = summary.get("warning")
+
+    return _render_question_matrix(question_items, plan, question_set.question_set_id)
 
 
-def _render_per_interview_summary(
-    *,
-    rows: list[dict[str, Any]],
-    summaries: list[dict[str, Any]],
-    plan: PlanResult,
-) -> ChatResponse:
+def _render_per_interview_summary(*, rows: list[dict[str, Any]], summaries: list[dict[str, Any]], plan: PlanResult) -> ChatResponse:
     citations, index_by_key = _collect_citations_registry()
     lines = ["## Oppsummering per intervju"]
 
@@ -519,6 +692,8 @@ def _render_per_interview_summary(
         if summary.get("error"):
             lines.append(f"Intervjuet kunne ikke oppsummeres robust: {summary['error']}")
             continue
+        if summary.get("warning"):
+            lines.append(f"Vurdering av grunnlag: {summary['warning']}")
         cleaned = sanitize_text_without_citations(str(summary.get("answer") or ""))
         lines.append(cleaned or "Ingen tydelig oppsummering kunne lages fra tilgjengelige utdrag.")
 
@@ -545,6 +720,8 @@ def _render_per_interview_summary(
                 "title": row.get("title"),
                 "status": "error" if summary.get("error") else "ok",
                 "citation_count": len(summary.get("citations") or []),
+                "coverage": summary.get("coverage"),
+                "effective_query": summary.get("effective_query"),
             }
             for row, summary in zip(rows, summaries)
         ],
@@ -567,20 +744,39 @@ def _run_per_interview_mode(
     for row in rows:
         sub_filters = dict(plan.filters)
         sub_filters["doc_id"] = [str(row.get("doc_id") or "")]
-        subplan = plan_query(message, sub_filters)
-        try:
-            resp = _run_planned_single_pass(
-                message=message,
-                plan=subplan,
-                top_k=min(_effective_top_k(top_k, subplan.retrieval), 6),
-                model_profile=model_profile,
-                prompt_profile_case_id=prompt_profile_case_id or "innovasjon_intervjuer",
-                answer_contract=_COMPACT_INTERVIEW_CONTRACT,
-                rewrite_query=False,
-            )
-            summaries.append({"answer": resp.answer, "citations": resp.citations})
-        except Exception as exc:
-            summaries.append({"error": str(exc), "citations": []})
+        bundle = _retrieve_structured_bundle(
+            query=message,
+            plan=plan,
+            filters=sub_filters,
+            top_k=top_k,
+            model_profile=model_profile,
+        )
+        summaries.append(
+            {
+                "item_id": str(row.get("doc_id") or ""),
+                "citations": list(bundle["citations"])[:2],
+                "effective_query": bundle["effective_query"],
+            }
+        )
+
+    structured = _summarize_structured_items(
+        item_kind="interview",
+        message=message,
+        items=[
+            {
+                "item_id": summary["item_id"],
+                "label": row.get("title") or row.get("doc_id"),
+                "citations": summary.get("citations") or [],
+            }
+            for row, summary in zip(rows, summaries)
+        ],
+        model_profile=model_profile,
+    )
+    for summary in summaries:
+        item = structured.get(summary["item_id"], {})
+        summary["answer"] = item.get("summary")
+        summary["coverage"] = item.get("coverage")
+        summary["warning"] = item.get("warning")
 
     return _render_per_interview_summary(rows=rows, summaries=summaries, plan=plan)
 
@@ -640,7 +836,7 @@ def _run_multi_query_mode(
         top_k=top_k,
         model_profile=model_profile,
         prompt_profile_case_id=prompt_profile_case_id,
-        router_instruction=router_instruction,
+        router_instruction=_merge_instruction(router_instruction, _quote_instruction(message)),
         answer_contract=plan.answer_mode.answer_contract if plan.answer_mode else None,
         extra_query_plan={
             **planner_debug,
@@ -717,12 +913,29 @@ def answer_question_stream(
     """SSE stream.
     Events:
       - query_plan: JSON plan for router/filter decisions
+      - status: {message: "..."}
       - citations: JSON list
       - delta: {delta: "..."}
       - error: {message: "...", type?: "..."}
       - done
     """
     try:
+        preview_plan = _preview_query_plan(
+            message=message,
+            filters=filters or {},
+            prompt_profile_case_id=prompt_profile_case_id,
+        )
+        yield f"event: query_plan\ndata: {json.dumps(preview_plan, ensure_ascii=False)}\n\n".encode("utf-8")
+        if preview_plan.get("streaming_allowed") is False:
+            status_payload = json.dumps(
+                {
+                    "message": "Arbeider med et strukturert svar. Dette kan ta litt tid.",
+                    "phase": "planning",
+                },
+                ensure_ascii=False,
+            )
+            yield f"event: status\ndata: {status_payload}\n\n".encode("utf-8")
+
         resp = answer_question(
             message,
             conversation_id,

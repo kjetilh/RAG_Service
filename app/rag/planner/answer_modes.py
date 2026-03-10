@@ -117,6 +117,13 @@ INTERVIEW_PATTERNS_OVERVIEW = [
     "hva viser intervjuene",
 ]
 
+INTERVIEW_GAP_PATTERNS = [
+    "svakest dekning i intervjuene",
+    "svak dekning i intervjuene",
+    "hva mangler vi dokumentasjon på",
+    "hvilke spørsmål eller temaer har svakest dekning",
+]
+
 CHAPTER_STRUCTURE_PATTERNS = [
     "kapittelstruktur",
     "struktur for kapittel",
@@ -260,7 +267,21 @@ def choose_answer_mode(
             detail_level=detail_level,
         )
 
-    if interview_hits and (literature_hits or writing_hits or case_id == "innovasjon_bokskriving"):
+    if _contains_any(message_lc, INTERVIEW_GAP_PATTERNS):
+        return AnswerModePlan(
+            answer_mode="interview_analysis",
+            source_strategy="interviews",
+            response_shape="direct_interview",
+            streaming_allowed=False,
+            rewrite_query=False,
+            use_subquery_planner=False,
+            default_prompt_case_id="innovasjon_intervjuer",
+            answer_contract=GENERAL_DIRECT_CONTRACT,
+            planner_focus="Prioriter hull, svak dekning, manglende dokumentasjon og tydelige forbehold i intervjumaterialet.",
+            detail_level=detail_level,
+        )
+
+    if interview_hits and (literature_hits or writing_hits):
         return AnswerModePlan(
             answer_mode="hybrid_analysis",
             source_strategy="hybrid",

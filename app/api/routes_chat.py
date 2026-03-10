@@ -161,6 +161,8 @@ def chat(req: ChatRequest):
 def chat_stream(req: ChatRequest):
     """Server-Sent Events (SSE) streaming endpoint.
     Events:
+      - query_plan: JSON query plan (sent first)
+      - status: JSON status update for long-running structured answers
       - citations: JSON citations list (sent first)
       - delta: incremental answer text chunks
       - done: indicates completion
