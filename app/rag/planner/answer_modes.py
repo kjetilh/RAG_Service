@@ -159,6 +159,19 @@ Forklar kort hva dette betyr for bokarbeidet eller analysen.
 Pek ut hva som er svakt belagt, mangler eller trenger flere kilder."""
 
 
+INTERVIEW_GAP_CONTRACT = """## Svakest dekning i intervjuene
+Pek ut hvilke spørsmål, temaer eller deler av intervjuguiden som er svakest belagt i materialet.
+
+## Hva som mangler
+Si konkret hva slags dokumentasjon, eksempler, erfaringer eller motforestillinger som mangler.
+
+## Hva dette betyr for bokarbeidet
+Forklar kort hva som bør undersøkes eller suppleres før teksten blir robust.
+
+Hold deg til innovasjonspolitikk, virkemidler, omstilling og de faktiske intervjuene.
+Ikke trekk inn kode, API, systemarkitektur eller andre tekniske temaer med mindre de er eksplisitt nevnt i intervjuutdragene."""
+
+
 CHAPTER_STRUCTURE_CONTRACT = """## Forslag til kapittelstruktur
 List en konkret kapittel- eller avsnittsstruktur i logisk rekkefølge.
 
@@ -269,14 +282,14 @@ def choose_answer_mode(
 
     if _contains_any(message_lc, INTERVIEW_GAP_PATTERNS):
         return AnswerModePlan(
-            answer_mode="interview_analysis",
+            answer_mode="interview_gap_analysis",
             source_strategy="interviews",
-            response_shape="direct_interview",
+            response_shape="interview_gaps",
             streaming_allowed=False,
             rewrite_query=False,
             use_subquery_planner=False,
             default_prompt_case_id="innovasjon_intervjuer",
-            answer_contract=GENERAL_DIRECT_CONTRACT,
+            answer_contract=INTERVIEW_GAP_CONTRACT,
             planner_focus="Prioriter hull, svak dekning, manglende dokumentasjon og tydelige forbehold i intervjumaterialet.",
             detail_level=detail_level,
         )

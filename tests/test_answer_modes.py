@@ -37,9 +37,10 @@ def test_choose_answer_mode_keeps_interview_gap_question_in_interview_lane():
         selected_domain="docs",
     )
 
-    assert plan.answer_mode == "interview_analysis"
+    assert plan.answer_mode == "interview_gap_analysis"
     assert plan.source_strategy == "interviews"
     assert plan.streaming_allowed is False
+    assert "Svakest dekning i intervjuene" in (plan.answer_contract or "")
 
 
 def test_choose_answer_mode_does_not_force_hybrid_for_interview_only_question_in_book_case():
