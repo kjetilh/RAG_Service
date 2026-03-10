@@ -56,6 +56,10 @@ checks:
       required_all:
         - "## Funn per spørsmål"
         - "Sitater:"
+      forbidden_any:
+        - "0:03"
+        - "startet transkripsjon"
+        - "Chaffey:**"
       required_source_types:
         - "innovasjon_intervju_transcript"
   - check_id: IV2
@@ -68,6 +72,10 @@ checks:
       required_all:
         - "## Oppsummering per intervju"
         - "Nøkkelsitater:"
+      forbidden_any:
+        - "0:03"
+        - "startet transkripsjon"
+        - "Chaffey:**"
       required_source_types:
         - "innovasjon_intervju_transcript"
   - check_id: IV3

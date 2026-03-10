@@ -37,6 +37,11 @@ _QUERY_PLANNER_FALLBACKS = {
 
 _STRUCTURED_ITEM_TOP_K = 4
 _STRUCTURED_ITEM_MAX_CHUNKS_PER_DOC = 2
+_LEADING_Q_RE = re.compile(r"^(?:Q\d+\.\s*)", flags=re.IGNORECASE)
+_TIMESTAMP_TOKEN_RE = re.compile(r"\b\d{1,2}:\d{2}")
+_BROKEN_SPEAKER_RE = re.compile(r"^(?P<speaker>[A-ZÆØÅ][A-Za-zÆØÅæøå .'\-]{1,60}?):\*\*\s*")
+_SPEAKER_RE = re.compile(r"^\*\*(?P<speaker>[A-ZÆØÅ][A-Za-zÆØÅæøå .'\-]{1,60}):\*\*\s*")
+_HEADERISH_RE = re.compile(r"^(hvordan|hvilke|hva|kan du|hvis du)\b", flags=re.IGNORECASE)
 
 
 def _normalize_string_list(value: Any) -> list[str]:
@@ -118,13 +123,101 @@ def _quote_instruction(message: str) -> str | None:
 
 
 def _append_documented_quotes(answer: str, citations: list[Citation], limit: int = 3) -> str:
-    selected = [citation for citation in citations if citation.excerpt][:limit]
+    selected = [citation for citation, _ in _select_display_citations(citations, limit=limit)]
     if not selected:
         return answer
     lines = [answer.rstrip(), "", "## Dokumenterte sitater"]
-    for idx, citation in enumerate(selected, start=1):
-        lines.append(f'- [{idx}] "{trim_excerpt(citation.excerpt)}" ({citation.title})')
+    for idx, (citation, excerpt) in enumerate(_select_display_citations(selected, limit=limit), start=1):
+        lines.append(f'- [{idx}] "{excerpt}" ({citation.title})')
     return "\n".join(lines).strip()
+
+
+def _collapse_excerpt(text: str) -> str:
+    cleaned = sanitize_text_without_citations(text or "")
+    cleaned = cleaned.replace("\u00a0", " ")
+    cleaned = _BROKEN_SPEAKER_RE.sub(lambda m: f"{m.group('speaker')}: ", cleaned)
+    cleaned = _SPEAKER_RE.sub(lambda m: f"{m.group('speaker')}: ", cleaned)
+    cleaned = _TIMESTAMP_TOKEN_RE.sub(" ", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned)
+    cleaned = re.sub(r"([.!?])([A-ZÆØÅ])", r"\1 \2", cleaned)
+    return cleaned.strip(" -:")
+
+
+def _strip_question_prefix(text: str, question_text: str | None) -> str:
+    if not question_text:
+        return text
+    candidates = [question_text.strip(), _LEADING_Q_RE.sub("", question_text.strip()).strip()]
+    out = text
+    for candidate in candidates:
+        if not candidate:
+            continue
+        lowered = out.lower()
+        lowered_candidate = candidate.lower()
+        if lowered.startswith(lowered_candidate):
+            out = out[len(candidate):].lstrip(" :-,")
+    return out
+
+
+def _display_excerpt_text(excerpt: str, *, question_text: str | None = None, limit: int = 220) -> str:
+    cleaned = _collapse_excerpt(excerpt)
+    cleaned = _strip_question_prefix(cleaned, question_text)
+    cleaned = re.sub(r"\b(ja|nei)\s+(ja|nei)\b", r"\1", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" -:")
+    return trim_excerpt(cleaned, limit=limit)
+
+
+def _excerpt_quality_score(excerpt: str, *, question_text: str | None = None) -> tuple[int, int, str]:
+    display = _display_excerpt_text(excerpt, question_text=question_text, limit=260)
+    raw = excerpt or ""
+    score = 0
+    word_count = len(display.split())
+    score += min(word_count, 24)
+    if 8 <= word_count <= 40:
+        score += 12
+    if question_text and not _HEADERISH_RE.match(display):
+        score += 8
+    if ":" in display[:32]:
+        score += 6
+    if _TIMESTAMP_TOKEN_RE.search(raw):
+        score -= 8
+    if "startet transkripsjon" in raw.lower():
+        score -= 40
+    if _HEADERISH_RE.match(display):
+        score -= 18
+    if display.lower().startswith("glenns kommentar"):
+        score -= 8
+    if len(display) < 45:
+        score -= 10
+    return score, len(display), display
+
+
+def _select_display_citations(
+    citations: list[Citation],
+    *,
+    limit: int,
+    question_text: str | None = None,
+) -> list[tuple[Citation, str]]:
+    ranked: list[tuple[int, int, int, Citation, str]] = []
+    for idx, citation in enumerate(citations):
+        if not citation.excerpt:
+            continue
+        score, display_len, display = _excerpt_quality_score(citation.excerpt, question_text=question_text)
+        if not display:
+            continue
+        ranked.append((score, display_len, idx, citation, display))
+
+    ranked.sort(key=lambda item: (-item[0], -item[1], item[2], item[3].doc_id, item[3].chunk_id))
+    selected: list[tuple[Citation, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for _score, _display_len, _idx, citation, display in ranked:
+        key = (citation.doc_id, display.lower())
+        if key in seen:
+            continue
+        seen.add(key)
+        selected.append((citation, display))
+        if len(selected) >= limit:
+            break
+    return selected
 
 
 def _build_query_plan(
@@ -609,10 +702,15 @@ def _render_question_matrix(question_items: list[dict[str, Any]], plan: PlanResu
 
         refs: list[int] = []
         quote_lines: list[str] = []
-        for citation in list(item.get("citations") or [])[:3]:
+        display_citations = _select_display_citations(
+            list(item.get("citations") or []),
+            limit=3,
+            question_text=item.get("question"),
+        )
+        for citation, display_excerpt in display_citations:
             ref = _register_citation(citation, citations, index_by_key)
             refs.append(ref)
-            quote_lines.append(f'- [{ref}] "{trim_excerpt(citation.excerpt)}" ({citation.title})')
+            quote_lines.append(f'- [{ref}] "{display_excerpt}" ({citation.title})')
         if refs:
             lines.append("Kilder: " + ", ".join(f"[{ref}]" for ref in refs))
             lines.append("Sitater:")
@@ -838,10 +936,11 @@ def _render_per_interview_summary(*, rows: list[dict[str, Any]], summaries: list
 
         refs: list[int] = []
         quote_lines: list[str] = []
-        for citation in list(summary.get("citations") or [])[:2]:
+        display_citations = _select_display_citations(list(summary.get("citations") or []), limit=2)
+        for citation, display_excerpt in display_citations:
             ref = _register_citation(citation, citations, index_by_key)
             refs.append(ref)
-            quote_lines.append(f'- [{ref}] "{trim_excerpt(citation.excerpt)}" ({citation.title})')
+            quote_lines.append(f'- [{ref}] "{display_excerpt}" ({citation.title})')
         if refs:
             lines.append("Kilder: " + ", ".join(f"[{ref}]" for ref in refs))
             lines.append("Nøkkelsitater:")

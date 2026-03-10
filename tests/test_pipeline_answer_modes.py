@@ -270,3 +270,43 @@ def test_append_documented_quotes_adds_real_excerpt_section():
     assert "Kort analyse" in out
     assert "## Dokumenterte sitater" in out
     assert '"Dette er sitat 1 fra materialet."' in out
+
+
+def test_display_excerpt_text_strips_question_prefix_and_timestamps():
+    excerpt = "Hvordan vil du beskrive hovedtrekkene i dagens innovasjonspolitikk? Glenn 0:03Det er behov for mer helhet."
+
+    out = pipeline._display_excerpt_text(
+        excerpt,
+        question_text="Hvordan vil du beskrive hovedtrekkene i dagens innovasjonspolitikk?",
+    )
+
+    assert out.startswith("Glenn")
+    assert "0:03" not in out
+    assert "Hvordan vil du beskrive" not in out
+
+
+def test_select_display_citations_prefers_cleaner_interview_excerpt():
+    noisy = Citation(
+        doc_id="d1",
+        title="Intervju A",
+        chunk_id="c1",
+        score=0.9,
+        excerpt="Hvordan vil du beskrive hovedtrekkene i dagens innovasjonspolitikk? Chaffey:** Men begynn gjerne å still. 0:03Ja yes ja.",
+    )
+    cleaner = Citation(
+        doc_id="d1",
+        title="Intervju A",
+        chunk_id="c2",
+        score=0.8,
+        excerpt="**Paul Chaffey:** Vi har en helhetlig innovasjonspolitikk, men virkemidlene henger ikke godt nok sammen.",
+    )
+
+    selected = pipeline._select_display_citations(
+        [noisy, cleaner],
+        limit=1,
+        question_text="Hvordan vil du beskrive hovedtrekkene i dagens innovasjonspolitikk?",
+    )
+
+    assert len(selected) == 1
+    assert selected[0][0].chunk_id == "c2"
+    assert "virkemidlene henger ikke godt nok sammen" in selected[0][1]
