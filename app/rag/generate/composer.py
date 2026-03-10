@@ -46,9 +46,10 @@ def compose_answer(
     model_profile: str | None = None,
     router_instruction: str | None = None,
     case_id: str | None = None,
+    answer_contract: str | None = None,
 ) -> str:
     persona = load_persona(case_id=case_id)
-    template = load_answer_template(case_id=case_id)
+    template = answer_contract if answer_contract else load_answer_template(case_id=case_id)
     provider = default_provider(model_profile=model_profile)
 
     # Support both:
@@ -67,7 +68,7 @@ def compose_answer(
         "Bruk tall som matcher kildene i CONTEXT.\n\n"
         f"SPØRSMÅL:\n{question}\n\n"
         f"CONTEXT:\n{context}\n\n"
-        "Fyll denne malen (behold overskriftene):\n"
+        "Følg denne svarinstruksen eller malen nøye:\n"
         f"{template}"
     )
 

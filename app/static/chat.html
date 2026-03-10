@@ -35,6 +35,12 @@
 
   <main>
     <div class="row">
+      <div style="min-width:220px;">
+        <label for="caseId" class="muted" style="display:block; margin-bottom:6px;">Case</label>
+        <select id="caseId" style="width:100%; padding:10px; font-size:14px;">
+          <option value="">standard</option>
+        </select>
+      </div>
       <textarea id="q" placeholder="Skriv spørsmålet ditt her..."></textarea>
       <div style="display:flex; flex-direction:column; gap:8px;">
         <button id="send">Send</button>
@@ -75,11 +81,13 @@
   const q = $("q");
   const sendBtn = $("send");
   const stopBtn = $("stop");
+  const caseIdEl = $("caseId");
   const answerEl = $("answer");
   const citationsEl = $("citations");
   const statusEl = $("status");
   const debugEl = $("debug");
   const citCountEl = $("citCount");
+  const modeEl = $("mode");
 
   let aborter = null;
 
@@ -97,6 +105,7 @@
     citationsEl.innerHTML = "";
     debugEl.textContent = "";
     citCountEl.textContent = "0";
+    modeEl.textContent = "streaming";
   }
 
   function escapeHtml(s) {
@@ -134,6 +143,28 @@
 
 
 
+  function renderCaseOptions(cases) {
+    const requested = new URLSearchParams(window.location.search).get("case_id") || "";
+    cases.forEach((item) => {
+      const opt = document.createElement("option");
+      opt.value = item.case_id;
+      opt.textContent = item.description ? `${item.case_id} · ${item.description}` : item.case_id;
+      if (item.case_id === requested) opt.selected = true;
+      caseIdEl.appendChild(opt);
+    });
+  }
+
+  async function loadCases() {
+    try {
+      const res = await fetch("/v1/cases");
+      if (!res.ok) return;
+      const payload = await res.json();
+      renderCaseOptions(Array.isArray(payload.cases) ? payload.cases : []);
+    } catch (_err) {
+      // UI should still work without explicit case listing.
+    }
+  }
+
   async function sendStreaming() {
     const message = q.value.trim();
     if (!message) return;
@@ -151,7 +182,7 @@
         "Content-Type": "application/json",
         "Accept": "text/event-stream",
       },
-      body: JSON.stringify({ message }),
+      body: JSON.stringify({ message, case_id: caseIdEl.value || null }),
       signal: aborter.signal,
     });
 
@@ -185,6 +216,18 @@
           renderCitations(citations);
         } catch (e) {
           logDebug("citations parse error: " + e);
+        }
+      } else if (ev === "query_plan") {
+        try {
+          const obj = JSON.parse(data);
+          const parts = [
+            obj.selected_case || "ingen-case",
+            obj.answer_mode || "standard",
+            obj.streaming_allowed === false ? "ikke-stream" : "stream",
+          ];
+          modeEl.textContent = parts.join(" · ");
+        } catch (e) {
+          logDebug("query_plan parse error: " + e);
         }
       } else if (ev === "delta") {
         try {
@@ -275,7 +318,8 @@
       sendBtn.click();
     }
   });
-  
+
+  loadCases();
 })();
 
 function debugLog(msg) {

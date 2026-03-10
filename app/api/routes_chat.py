@@ -55,6 +55,16 @@ def _document_file_path(doc_id: str) -> str:
     return str(file_path)
 
 
+def _available_source_types() -> set[str]:
+    sql = "SELECT DISTINCT source_type FROM documents WHERE source_type IS NOT NULL AND source_type <> ''"
+    try:
+        with engine().begin() as conn:
+            rows = conn.execute(text(sql)).fetchall()
+    except Exception:
+        return set()
+    return {str(row[0]).strip() for row in rows if row and str(row[0]).strip()}
+
+
 def _filters_with_case(filters: dict | None, case_id: str | None) -> dict:
     out = dict(filters or {})
     if case_id:
@@ -75,6 +85,35 @@ def _run_query(req: QueryRequest):
         model_profile=req.model_profile,
         prompt_profile_case_id=req.prompt_profile_case_id,
     )
+
+
+@router.get("/v1/cases")
+def list_cases():
+    cfg = load_rag_cases(settings.rag_cases_path)
+    available_source_types = _available_source_types()
+    if not available_source_types:
+        available_source_types = set()
+    return {
+        "cases": [
+            {
+                "case_id": case.case_id,
+                "description": case.description,
+                "enabled": case.enabled,
+            }
+            for case in cfg.cases
+            if case.enabled
+            and (
+                not available_source_types
+                or bool(
+                    available_source_types
+                    & (
+                        set(case.planner.docs_source_types)
+                        | set(case.planner.prompts_source_types)
+                    )
+                )
+            )
+        ]
+    }
 
 
 @router.post("/v1/query", response_model=QueryResponse)
@@ -101,6 +140,7 @@ def chat(req: ChatRequest):
         query_req = QueryRequest(
             query=req.message,
             conversation_id=req.conversation_id,
+            case_id=req.case_id,
             filters=req.filters or {},
             top_k=req.top_k,
             model_profile=req.model_profile,
@@ -130,7 +170,7 @@ def chat_stream(req: ChatRequest):
         gen = answer_question_stream(
             message=req.message,
             conversation_id=req.conversation_id,
-            filters=req.filters or {},
+            filters=_filters_with_case(req.filters, req.case_id),
             top_k=req.top_k,
             model_profile=req.model_profile,
             prompt_profile_case_id=req.prompt_profile_case_id,

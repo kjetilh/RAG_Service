@@ -24,6 +24,9 @@ def vector_search(query_embedding: np.ndarray, top_k: int = 50, filters: dict | 
     if "source_type" in filters:
         where.append("d.source_type = ANY(:source_type)")
         params["source_type"] = filters["source_type"]
+    if "doc_id" in filters:
+        where.append("d.doc_id = ANY(:doc_id)")
+        params["doc_id"] = filters["doc_id"]
     where_sql = ("WHERE " + " AND ".join(where)) if where else ""
 
     sql = f'''

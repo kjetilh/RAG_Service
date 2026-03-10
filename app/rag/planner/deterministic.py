@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.rag.cases.loader import EvaluationConfig, case_by_id, load_rag_cases
+from app.rag.planner.answer_modes import AnswerModePlan, choose_answer_mode, source_types_for_strategy
 from app.rag.retrieve.query_router import route_query, router_prompt_instruction
 from app.settings import settings
 
@@ -17,6 +18,7 @@ class PlanResult:
     prompt_instruction: str | None
     case_id: str | None
     evaluation: EvaluationConfig | None
+    answer_mode: AnswerModePlan | None = None
 
 
 def _base_retrieval_settings() -> dict[str, int]:
@@ -128,6 +130,7 @@ def _legacy_plan(message: str, filters: dict[str, Any]) -> PlanResult:
         prompt_instruction=router_prompt_instruction(legacy),
         case_id=None,
         evaluation=None,
+        answer_mode=None,
     )
 
 
@@ -182,9 +185,25 @@ def plan_query(message: str, filters: dict[str, Any] | None = None) -> PlanResul
             )
             reason = "default_domain" if (docs_hits + prompt_hits) == 0 else "keyword_tie_default_domain"
 
+    answer_mode = choose_answer_mode(
+        message=message_lc,
+        case_id=selected_case.case_id,
+        docs_source_types=selected_case.planner.docs_source_types,
+        selected_domain=selected_domain,
+    )
+
     planned_filters = dict(raw_filters)
-    if source_types:
+    if explicit_source_types:
         planned_filters["source_type"] = source_types
+    else:
+        mode_source_types = source_types_for_strategy(
+            answer_mode.source_strategy,
+            selected_case.planner.docs_source_types,
+        )
+        if mode_source_types:
+            planned_filters["source_type"] = mode_source_types
+        elif source_types:
+            planned_filters["source_type"] = source_types
 
     trace = {
         "planner_version": "ng-1",
@@ -201,6 +220,7 @@ def plan_query(message: str, filters: dict[str, Any] | None = None) -> PlanResul
         "docs_keyword_hits": int(docs_hits),
         "confidence": _confidence(prompt_hits, docs_hits),
         "retrieval": retrieval,
+        **answer_mode.as_trace(),
     }
 
     return PlanResult(
@@ -210,4 +230,5 @@ def plan_query(message: str, filters: dict[str, Any] | None = None) -> PlanResul
         prompt_instruction=_prompt_instruction(selected_domain),
         case_id=selected_case.case_id,
         evaluation=selected_case.evaluation,
+        answer_mode=answer_mode,
     )
