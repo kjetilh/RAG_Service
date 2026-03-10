@@ -273,7 +273,7 @@ def test_append_documented_quotes_adds_real_excerpt_section():
 
 
 def test_display_excerpt_text_strips_question_prefix_and_timestamps():
-    excerpt = "Hvordan vil du beskrive hovedtrekkene i dagens innovasjonspolitikk? Glenn 0:03Det er behov for mer helhet."
+    excerpt = "Hvordan vil du beskrive hovedtrekkene i dagens innovasjonspolitikk? Glenn 0:03Det er behov for mer helhet. Chaffey:** Men her er et eksempel."
 
     out = pipeline._display_excerpt_text(
         excerpt,
@@ -283,6 +283,7 @@ def test_display_excerpt_text_strips_question_prefix_and_timestamps():
     assert out.startswith("Glenn")
     assert "0:03" not in out
     assert "Hvordan vil du beskrive" not in out
+    assert "Chaffey:**" not in out
 
 
 def test_select_display_citations_prefers_cleaner_interview_excerpt():

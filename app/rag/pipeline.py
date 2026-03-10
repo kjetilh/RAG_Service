@@ -41,6 +41,8 @@ _LEADING_Q_RE = re.compile(r"^(?:Q\d+\.\s*)", flags=re.IGNORECASE)
 _TIMESTAMP_TOKEN_RE = re.compile(r"\b\d{1,2}:\d{2}")
 _BROKEN_SPEAKER_RE = re.compile(r"^(?P<speaker>[A-ZÆØÅ][A-Za-zÆØÅæøå .'\-]{1,60}?):\*\*\s*")
 _SPEAKER_RE = re.compile(r"^\*\*(?P<speaker>[A-ZÆØÅ][A-Za-zÆØÅæøå .'\-]{1,60}):\*\*\s*")
+_BROKEN_SPEAKER_ANY_RE = re.compile(r"(?<!\*)(?P<speaker>[A-ZÆØÅ][A-Za-zÆØÅæøå .'\-]{1,60}?):\*\*")
+_SPEAKER_ANY_RE = re.compile(r"\*\*(?P<speaker>[A-ZÆØÅ][A-Za-zÆØÅæøå .'\-]{1,60}):\*\*")
 _HEADERISH_RE = re.compile(r"^(hvordan|hvilke|hva|kan du|hvis du)\b", flags=re.IGNORECASE)
 
 
@@ -137,6 +139,8 @@ def _collapse_excerpt(text: str) -> str:
     cleaned = cleaned.replace("\u00a0", " ")
     cleaned = _BROKEN_SPEAKER_RE.sub(lambda m: f"{m.group('speaker')}: ", cleaned)
     cleaned = _SPEAKER_RE.sub(lambda m: f"{m.group('speaker')}: ", cleaned)
+    cleaned = _BROKEN_SPEAKER_ANY_RE.sub(lambda m: f"{m.group('speaker')}: ", cleaned)
+    cleaned = _SPEAKER_ANY_RE.sub(lambda m: f"{m.group('speaker')}: ", cleaned)
     cleaned = _TIMESTAMP_TOKEN_RE.sub(" ", cleaned)
     cleaned = re.sub(r"\s+", " ", cleaned)
     cleaned = re.sub(r"([.!?])([A-ZÆØÅ])", r"\1 \2", cleaned)
