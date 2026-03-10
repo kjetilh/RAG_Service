@@ -43,6 +43,11 @@ Disse filene bor ingestes eller synkes med:
 
 - `source_type=innovasjon_intervju_transcript`
 
+Anbefalt før ingest:
+
+- rens transkripsjonene til Markdown med `scripts/prepare_interview_transcripts.py`
+- ingest/sync de renskrevne `.md`-filene, ikke de rå `.docx`-transkripsjonene
+
 ## Eksempel: sync intervju-mappe
 
 ```bash
@@ -60,6 +65,24 @@ Merk:
 
 - `path` ma peke til en mappe under `INGEST_ROOT` pa serveren
 - den lokale macOS-stien ma derfor kopieres eller sync-es inn til innorag sin uploads-mappe for serverbruk
+
+## Rensing av intervju-transkripsjoner
+
+Lag ingest-klare Markdown-filer:
+
+```bash
+python -m scripts.prepare_interview_transcripts \
+  --input-dir /Users/kjetil/Documents/Bokprosjekt_Innovasjonsledelse/interviews \
+  --output-dir /tmp/innovasjon_intervjuer_cleaned \
+  --force
+```
+
+Anbefalt server-layout:
+
+- rå filer: `uploads/innovasjon/interviews/raw`
+- renskrevne filer: `uploads/innovasjon/interviews/cleaned`
+
+Sync deretter `interviews/cleaned` med `source_type=innovasjon_intervju_transcript`.
 
 ## Eksempel: kollektiv analyse per sporsmal
 
@@ -186,3 +209,13 @@ Hvis du vil bruke `innorag` fra Deep Research eller andre lesende klienter, bruk
 - `GET /v1/research/cases/{case_id}/links`
 
 Dette krever et separat bearer-token, ikke `X-API-Key`.
+
+## Trygg deploy av innorag pa VPS
+
+For å unngå feil bruk av Compose-defaults, bruk alltid:
+
+```bash
+./scripts/deploy_innorag.sh
+```
+
+Scriptet bruker alltid `docker/.env.vps.multi`, `docker/docker-compose.vps.yml` og `--no-deps`.

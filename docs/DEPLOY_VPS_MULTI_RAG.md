@@ -31,6 +31,7 @@ Rediger `docker/.env.vps.multi`:
 - sett unike admin-nøkler per domene
 - sett LLM nøkler/modeller per domene
 - sett promptfiler per domene ved behov
+- sett eksplisitte case-allowlister per domene
 - verifiser upload-stier
 
 Generer nøkler:
@@ -143,7 +144,7 @@ curl -X POST http://127.0.0.1:8102/v1/admin/ingest \
 
 Anbefalt `source_type`-standard:
 
-- Innovasjon: `innovasjonsledelse`, `immovasjonsfag`
+- Innovasjon: `innovasjonsledelse`, `innovasjonsfag`
 - Dokumentasjon (`doc`): `haven_docs`, `cellprotocol_docs`
 
 ### 6.1 Kontinuerlig synk (nye/endrede/slettede filer)

@@ -1,0 +1,57 @@
+version: 1
+plan_id: innorag_verification_v1
+checks:
+  - check_id: K1
+    case_id: innovasjon_bokskriving
+    question: "Hvorfor er innovasjon et legitimt politikkområde?"
+    expected:
+      answer_mode: general
+      source_strategy: articles
+  - check_id: K2
+    case_id: innovasjon_bokskriving
+    question: "Hva er forskjellen mellom FoU-politikk og innovasjonspolitikk?"
+    expected:
+      answer_mode: general
+      source_strategy: articles
+  - check_id: K3
+    case_id: innovasjon_bokskriving
+    question: "Hvordan kan en aktiv innovasjonspolitikk svekke innovasjonsevnen?"
+    expected:
+      answer_mode: general
+      source_strategy: articles
+  - check_id: IV1
+    case_id: innovasjon_bokskriving
+    question: "Hva er funnene pr spørsmål? Vis sitater."
+    expected:
+      answer_mode: interview_findings_per_question
+      source_strategy: interviews
+  - check_id: IV2
+    case_id: innovasjon_bokskriving
+    question: "Gi en oppsummering pr intervju av hovedtrekkene."
+    expected:
+      answer_mode: interview_summary_per_interview
+      source_strategy: interviews
+  - check_id: IV3
+    case_id: innovasjon_bokskriving
+    question: "Hva er hovedtrekkene i intervjuene om innovasjonspolitikk og virkemidler?"
+    expected:
+      answer_mode: interview_main_patterns
+      source_strategy: interviews
+  - check_id: IV4
+    case_id: innovasjon_bokskriving
+    question: "Hvilke spørsmål eller temaer har svakest dekning i intervjuene, og hva mangler vi dokumentasjon på?"
+    expected:
+      answer_mode: interview_gap_analysis
+      source_strategy: interviews
+  - check_id: IV5
+    case_id: innovasjon_bokskriving
+    question: "Hvilke intervjuer peker tydeligst på fragmentering i virkemiddelapparatet? Vis sitater."
+    expected:
+      answer_mode: interview_analysis
+      source_strategy: interviews
+  - check_id: IV6
+    case_id: innovasjon_bokskriving
+    question: "Lag forslag til kapittelstruktur for et bokkapittel om innovasjonspolitikk og virkemidler basert på litteratur og intervjuer, og begrunn valgene."
+    expected:
+      answer_mode: chapter_structure
+      source_strategy: hybrid

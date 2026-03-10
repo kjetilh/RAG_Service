@@ -5,6 +5,8 @@ Dette dokumentet samler verifiseringsspørsmål for `innorag`.
 Utgangspunkt:
 - Faglig kalibreringsgrunnlag ligger utenfor repoet i `/Users/kjetil/Documents/Bokprosjekt_Innovasjonsledelse/kalibrering.md`.
 - Intervjudelen trenger i tillegg egne verifiseringsspørsmål fordi den ikke har én fast fasit, men må vurderes mot struktur, kildebinding og dekningsgrad.
+- Kjørbar verifikasjonsplan ligger i `config/innorag_verification_plan.yml`.
+- Automatisk runner finnes i `scripts/run_innorag_verification.py`.
 
 ## 1. Faglig verifisering mot artikler og grunnlagsdokumenter
 
@@ -114,3 +116,15 @@ Ved verifisering bør hvert svar vurderes på fem akser:
 3. Skiller svaret tydelig mellom litteratur, intervjuer og syntese når det trengs?
 4. Rapporterer svaret svake eller manglende grunnlag i stedet for å finne på ting?
 5. Er svaret praktisk brukbart i bokarbeidet?
+
+## 5. Automatisk kjøring
+
+Eksempel mot live `innorag`:
+
+```bash
+python -m scripts.run_innorag_verification \
+  --base-url https://innorag.haven.digipomps.org \
+  --plan config/innorag_verification_plan.yml \
+  --output-md /tmp/innorag_verification.md \
+  --output-json /tmp/innorag_verification.json
+```

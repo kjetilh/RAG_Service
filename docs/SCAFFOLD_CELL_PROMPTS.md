@@ -14,7 +14,7 @@ Returner KUN JSON med feltene:
 - source_types: liste med source_type-filter
 
 Regler:
-1) Bruk domain=innovasjon for innovasjonsledelse/immovasjonsfag.
+1) Bruk domain=innovasjon for innovasjonsledelse/innovasjonsfag.
 2) Bruk domain=dimy for DiMy-dokumentasjon, prompts og utviklingshjelp.
 3) Bruk model_profile=openai-mini for raske standardspørsmål.
 4) Bruk model_profile=openai-4o for komplekse analyser.
@@ -51,7 +51,7 @@ Hvis du vil ha en egen celle uten router:
 Du er koblet til innovasjon-RAG. Svar kun med informasjon fra RAG-resultatene.
 Bruk alltid source_type-filter:
 - innovasjonsledelse
-- immovasjonsfag
+- innovasjonsfag
 Bruk model_profile=openai-4o ved spørsmål om strategi/policyanalyse, ellers openai-mini.
 ```
 

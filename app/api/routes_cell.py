@@ -34,6 +34,7 @@ from app.rag.access.control import (
 )
 from app.rag.audit.coverage_report import resolve_existing_file
 from app.rag.cases.loader import case_by_id, load_rag_cases
+from app.rag.cases.visibility import visible_case_ids
 from app.rag.generate.llm_provider import ModelProfileError, validate_model_profile
 from app.rag.index.db import engine
 from app.settings import settings
@@ -153,6 +154,9 @@ def _resolve_identity(
 
 def _require_known_case(case_id: str) -> None:
     if not case_exists(case_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Unknown case: {case_id}")
+    cfg = load_rag_cases(settings.rag_cases_path)
+    if case_id not in visible_case_ids(cfg):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Unknown case: {case_id}")
 
 

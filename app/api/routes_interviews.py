@@ -6,6 +6,8 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from app.api.routes_chat import _run_query
+from app.rag.cases.loader import load_rag_cases
+from app.rag.cases.visibility import visible_case_ids
 from app.rag.generate.llm_provider import ModelProfileError, validate_model_profile
 from app.rag.interviews.collective import (
     CollectiveSummaryResponse,
@@ -13,6 +15,7 @@ from app.rag.interviews.collective import (
     build_collective_summary,
     prepare_question_set,
 )
+from app.settings import settings
 
 router = APIRouter()
 
@@ -32,6 +35,15 @@ class CollectiveSummaryRequest(BaseModel):
 def interviews_collective_summary(req: CollectiveSummaryRequest):
     try:
         validate_model_profile(req.model_profile)
+        cfg = load_rag_cases(settings.rag_cases_path)
+        visible_ids = visible_case_ids(cfg)
+        if req.case_id and req.case_id not in visible_ids:
+            raise HTTPException(status_code=404, detail=f"Case is not available on this instance: {req.case_id}")
+        if req.prompt_profile_case_id and req.prompt_profile_case_id not in visible_ids:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Prompt profile case is not available on this instance: {req.prompt_profile_case_id}",
+            )
         question_set = prepare_question_set(
             inline_questions=req.questions,
             question_set_path=req.question_set_path,

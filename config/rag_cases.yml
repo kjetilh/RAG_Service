@@ -21,10 +21,10 @@ cases:
       min_avg_score: 0.0
       enforce: false
   - case_id: innovasjon
-    description: Innovasjonsledelse og immovasjonsfag.
+    description: Innovasjonsledelse og innovasjonsfag.
     enabled: true
     planner:
-      docs_source_types: ["innovasjonsledelse", "immovasjonsfag"]
+      docs_source_types: ["innovasjonsledelse", "innovasjonsfag"]
       prompts_source_types: []
       docs_keywords: ["policy", "innovation", "innovasjon", "mission", "governance"]
       prompt_keywords: []
@@ -65,7 +65,7 @@ cases:
     description: Skrivehjelp for innovasjonsledelse-boka med artikler og intervju-transkripsjoner i samme case.
     enabled: true
     planner:
-      docs_source_types: ["innovasjonsledelse", "immovasjonsfag", "innovasjon_intervju_transcript"]
+      docs_source_types: ["innovasjonsledelse", "innovasjonsfag", "innovasjon_intervju_transcript"]
       prompts_source_types: []
       docs_keywords: ["bok", "kapittel", "manus", "skriv", "skriving", "skrivehjelp", "innovasjonspolitikk", "virkemiddel", "virkemidler", "intervju", "syntese", "drøfting", "analyse", "empiri"]
       prompt_keywords: []

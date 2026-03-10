@@ -6,6 +6,7 @@ from sqlalchemy import text
 
 from app.models.schemas import ChatRequest, ChatResponse, QueryRequest, QueryResponse
 from app.rag.cases.loader import case_by_id, load_rag_cases
+from app.rag.cases.visibility import visible_case_ids, visible_cases
 from app.rag.generate.llm_provider import ModelProfileError, validate_model_profile
 from app.rag.index.db import engine
 from app.rag.pipeline import answer_question, answer_question_stream
@@ -74,8 +75,18 @@ def _filters_with_case(filters: dict | None, case_id: str | None) -> dict:
 
 def _run_query(req: QueryRequest):
     validate_model_profile(req.model_profile)
+    cfg = load_rag_cases(settings.rag_cases_path)
+    visible_ids = visible_case_ids(cfg)
+    if req.case_id:
+        if req.case_id not in visible_ids:
+            raise HTTPException(status_code=404, detail=f"Case is not available on this instance: {req.case_id}")
+        case_by_id(cfg, req.case_id)
     if req.prompt_profile_case_id:
-        cfg = load_rag_cases(settings.rag_cases_path)
+        if req.prompt_profile_case_id not in visible_ids:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Prompt profile case is not available on this instance: {req.prompt_profile_case_id}",
+            )
         case_by_id(cfg, req.prompt_profile_case_id)
     return answer_question(
         message=req.query,
@@ -91,8 +102,6 @@ def _run_query(req: QueryRequest):
 def list_cases():
     cfg = load_rag_cases(settings.rag_cases_path)
     available_source_types = _available_source_types()
-    if not available_source_types:
-        available_source_types = set()
     return {
         "cases": [
             {
@@ -100,18 +109,7 @@ def list_cases():
                 "description": case.description,
                 "enabled": case.enabled,
             }
-            for case in cfg.cases
-            if case.enabled
-            and (
-                not available_source_types
-                or bool(
-                    available_source_types
-                    & (
-                        set(case.planner.docs_source_types)
-                        | set(case.planner.prompts_source_types)
-                    )
-                )
-            )
+            for case in visible_cases(cfg, available_source_types=available_source_types)
         ]
     }
 
