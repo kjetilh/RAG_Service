@@ -96,6 +96,13 @@ def _detail_instruction(plan: PlanResult) -> str | None:
     )
 
 
+def _retrieval_message(message: str, plan: PlanResult) -> str:
+    hint = plan.answer_mode.retrieval_hint if plan.answer_mode else None
+    if not hint:
+        return message
+    return f"{message}\n\nSOKEFOKUS: {hint}"
+
+
 def _wants_quotes(message: str) -> bool:
     message_lc = (message or "").lower()
     return "sitat" in message_lc or "sitater" in message_lc or "vis sitater" in message_lc
@@ -270,8 +277,9 @@ def _run_planned_single_pass(
 ) -> ChatResponse:
     effective_filters = dict(filters_override or plan.filters)
     effective_top_k = _effective_top_k(top_k, plan.retrieval)
+    retrieval_message = _retrieval_message(message, plan)
     candidates, effective_query = _retrieve_candidates(
-        query=message,
+        query=retrieval_message,
         filters=effective_filters,
         retrieval=plan.retrieval,
         model_profile=model_profile,
@@ -280,6 +288,7 @@ def _run_planned_single_pass(
     )
 
     query_plan_extra = dict(extra_query_plan or {})
+    query_plan_extra["retrieval_query_input"] = retrieval_message
     query_plan_extra["effective_query"] = effective_query
     query_plan_extra["effective_filters"] = effective_filters
     return _render_response(
@@ -634,14 +643,15 @@ def _render_question_matrix(question_items: list[dict[str, Any]], plan: PlanResu
     return ChatResponse(answer="\n".join(lines).strip(), citations=citations, retrieval_debug=debug)
 
 
-def _run_collective_question_mode(
+def _collect_question_items(
     *,
     message: str,
     plan: PlanResult,
     top_k: int | None,
     model_profile: str | None,
     prompt_profile_case_id: str | None,
-) -> ChatResponse:
+) -> tuple[str, list[dict[str, Any]]]:
+    del prompt_profile_case_id
     question_set = prepare_question_set(
         inline_questions=None,
         question_set_path=plan.answer_mode.question_set_path if plan.answer_mode else None,
@@ -679,7 +689,136 @@ def _run_collective_question_mode(
         item["coverage"] = summary.get("coverage")
         item["warning"] = summary.get("warning")
 
-    return _render_question_matrix(question_items, plan, question_set.question_set_id)
+    return question_set.question_set_id, question_items
+
+
+def _run_collective_question_mode(
+    *,
+    message: str,
+    plan: PlanResult,
+    top_k: int | None,
+    model_profile: str | None,
+    prompt_profile_case_id: str | None,
+) -> ChatResponse:
+    question_set_id, question_items = _collect_question_items(
+        message=message,
+        plan=plan,
+        top_k=top_k,
+        model_profile=model_profile,
+        prompt_profile_case_id=prompt_profile_case_id,
+    )
+    return _render_question_matrix(question_items, plan, question_set_id)
+
+
+def _gap_rank(item: dict[str, Any]) -> tuple[int, int, int, str]:
+    coverage = str(item.get("coverage") or "").lower()
+    coverage_rank = {"low": 0, "medium": 1, "high": 2}.get(coverage, 1)
+    unique_doc_count = len({c.doc_id for c in list(item.get("citations") or []) if c.doc_id})
+    citation_count = len(list(item.get("citations") or []))
+    return (coverage_rank, unique_doc_count, citation_count, str(item.get("question_id") or ""))
+
+
+def _gap_reason(item: dict[str, Any]) -> str:
+    reasons: list[str] = []
+    citations = list(item.get("citations") or [])
+    unique_doc_count = len({c.doc_id for c in citations if c.doc_id})
+    if unique_doc_count < 2:
+        reasons.append("få uavhengige intervjuperspektiver")
+    if len(citations) < 2:
+        reasons.append("få konkrete utsagn eller eksempler")
+    warning = str(item.get("warning") or "").strip()
+    if warning and "fallback" not in warning.lower():
+        reasons.append(sanitize_text_without_citations(warning))
+    if not reasons:
+        coverage = str(item.get("coverage") or "").lower()
+        if coverage == "medium":
+            reasons.append("brukbart, men fortsatt begrenset grunnlag")
+        elif coverage == "low":
+            reasons.append("tynt eller sprikende grunnlag")
+        else:
+            reasons.append("dekningen er svakere enn for de andre spørsmålene")
+    return "; ".join(dict.fromkeys(reasons))
+
+
+def _render_interview_gap_report(question_items: list[dict[str, Any]], plan: PlanResult, question_set_id: str) -> ChatResponse:
+    citations, index_by_key = _collect_citations_registry()
+    weakest = sorted(question_items, key=_gap_rank)[:3]
+    lines = ["## Svakest dekning i intervjuene"]
+    structured_debug: list[dict[str, Any]] = []
+
+    if not weakest:
+        lines.append("Det finnes ikke nok intervjumateriale til å vurdere dekningen robust.")
+    for item in weakest:
+        lines.append("")
+        lines.append(f"### {item['question_id']}. {item['question']}")
+        cleaned = sanitize_text_without_citations(item.get("summary") or "")
+        lines.append(cleaned or "Grunnlaget er for svakt til å oppsummere dette spørsmålet robust.")
+        lines.append(f"Hvorfor dette er svakt belagt: {_gap_reason(item)}.")
+        refs: list[int] = []
+        for citation in list(item.get("citations") or [])[:2]:
+            ref = _register_citation(citation, citations, index_by_key)
+            refs.append(ref)
+        if refs:
+            lines.append("Kilder: " + ", ".join(f"[{ref}]" for ref in refs))
+        structured_debug.append(
+            {
+                "question_id": item["question_id"],
+                "citation_count": len(item.get("citations") or []),
+                "unique_doc_count": len({c.doc_id for c in list(item.get("citations") or []) if c.doc_id}),
+                "coverage": item.get("coverage"),
+                "effective_query": item.get("effective_query"),
+            }
+        )
+
+    lines.extend(["", "## Hva som mangler"])
+    for item in weakest:
+        unique_doc_count = len({c.doc_id for c in list(item.get("citations") or []) if c.doc_id})
+        missing_bits: list[str] = []
+        if unique_doc_count < 2:
+            missing_bits.append("flere uavhengige intervjuperspektiver")
+        if len(list(item.get("citations") or [])) < 2:
+            missing_bits.append("flere konkrete utsagn, eksempler eller erfaringer")
+        if not missing_bits:
+            missing_bits.append("tydeligere og mer eksplisitt dekning av spørsmålet")
+        lines.append(f"- {item['question_id']}: {', '.join(dict.fromkeys(missing_bits))}.")
+
+    lines.extend(
+        [
+            "",
+            "## Hva dette betyr for bokarbeidet",
+            "Disse spørsmålene bør enten få mer empiri eller behandles med tydeligere forbehold i teksten. "
+            "Bruk dem ikke som bærende funn uten å supplere med flere intervjuer eller sterkere dokumentasjon.",
+        ]
+    )
+
+    debug = {
+        "query_plan": {
+            **dict(plan.trace),
+            "structured_item_count": len(question_items),
+            "question_set_id": question_set_id,
+            "structured_generation_mode": "retrieval_many_llm_one",
+        },
+        "structured_items": structured_debug,
+    }
+    return ChatResponse(answer="\n".join(lines).strip(), citations=citations, retrieval_debug=debug)
+
+
+def _run_interview_gap_mode(
+    *,
+    message: str,
+    plan: PlanResult,
+    top_k: int | None,
+    model_profile: str | None,
+    prompt_profile_case_id: str | None,
+) -> ChatResponse:
+    question_set_id, question_items = _collect_question_items(
+        message=message,
+        plan=plan,
+        top_k=top_k,
+        model_profile=model_profile,
+        prompt_profile_case_id=prompt_profile_case_id,
+    )
+    return _render_interview_gap_report(question_items, plan, question_set_id)
 
 
 def _render_per_interview_summary(*, rows: list[dict[str, Any]], summaries: list[dict[str, Any]], plan: PlanResult) -> ChatResponse:
@@ -870,6 +1009,15 @@ def answer_question(
 
     if answer_mode == "interview_summary_per_interview":
         return _run_per_interview_mode(
+            message=message,
+            plan=plan,
+            top_k=top_k,
+            model_profile=model_profile,
+            prompt_profile_case_id=prompt_profile_case_id,
+        )
+
+    if answer_mode == "interview_gap_analysis":
+        return _run_interview_gap_mode(
             message=message,
             plan=plan,
             top_k=top_k,

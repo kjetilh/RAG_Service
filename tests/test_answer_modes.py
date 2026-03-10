@@ -43,6 +43,21 @@ def test_choose_answer_mode_keeps_interview_gap_question_in_interview_lane():
     assert "Svakest dekning i intervjuene" in (plan.answer_contract or "")
 
 
+def test_choose_answer_mode_adds_policy_focus_for_innovation_policy_questions():
+    plan = choose_answer_mode(
+        message="Hvorfor er innovasjon et legitimt politikkområde i Norge?",
+        case_id="innovasjon_bokskriving",
+        docs_source_types=["innovasjonsledelse", "innovasjonsfag", "innovasjon_intervju_transcript"],
+        selected_domain="docs",
+    )
+
+    assert plan.answer_mode == "general"
+    assert plan.source_strategy == "articles"
+    assert plan.rewrite_query is False
+    assert "innovasjonspolitikk" in (plan.planner_focus or "")
+    assert "virkemidler" in (plan.retrieval_hint or "")
+
+
 def test_choose_answer_mode_does_not_force_hybrid_for_interview_only_question_in_book_case():
     plan = choose_answer_mode(
         message="Hvilke intervjuer peker tydeligst på fragmentering i virkemiddelapparatet? Vis sitater.",

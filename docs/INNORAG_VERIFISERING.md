@@ -7,6 +7,13 @@ Utgangspunkt:
 - Intervjudelen trenger i tillegg egne verifiseringsspørsmål fordi den ikke har én fast fasit, men må vurderes mot struktur, kildebinding og dekningsgrad.
 - Kjørbar verifikasjonsplan ligger i `config/innorag_verification_plan.yml`.
 - Automatisk runner finnes i `scripts/run_innorag_verification.py`.
+- Runneren sjekker nå både routing og enkel innholdskvalitet:
+  - forventet `answer_mode`
+  - forventet `source_strategy`
+  - minimum antall kilder
+  - påkrevde uttrykk eller seksjoner
+  - forbudte uttrykk som signaliserer faglig drift
+  - forventede `source_type`-verdier
 
 ## 1. Faglig verifisering mot artikler og grunnlagsdokumenter
 

@@ -195,6 +195,8 @@ def plan_query(message: str, filters: dict[str, Any] | None = None) -> PlanResul
     planned_filters = dict(raw_filters)
     if explicit_source_types:
         planned_filters["source_type"] = source_types
+    elif selected_domain == "prompts":
+        planned_filters["source_type"] = source_types
     else:
         mode_source_types = source_types_for_strategy(
             answer_mode.source_strategy,

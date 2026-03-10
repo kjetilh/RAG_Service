@@ -30,6 +30,9 @@ def _post_json(base_url: str, payload: dict[str, Any]) -> tuple[float, dict[str,
 def _evaluate_check(item: dict[str, Any], response: dict[str, Any], seconds: float) -> dict[str, Any]:
     trace = response.get("trace") or {}
     expected = dict(item.get("expected") or {})
+    answer = response.get("answer") or ""
+    answer_lc = answer.lower()
+    actual_source_types = list(trace.get("source_types_applied") or [])
     checks = {
         "answer_mode": expected.get("answer_mode"),
         "source_strategy": expected.get("source_strategy"),
@@ -38,8 +41,18 @@ def _evaluate_check(item: dict[str, Any], response: dict[str, Any], seconds: flo
         key: (expected_value is None or trace.get(key) == expected_value)
         for key, expected_value in checks.items()
     }
+    required_all = [str(value) for value in list(expected.get("required_all") or []) if str(value).strip()]
+    required_any = [str(value) for value in list(expected.get("required_any") or []) if str(value).strip()]
+    forbidden_any = [str(value) for value in list(expected.get("forbidden_any") or []) if str(value).strip()]
+    min_citations = expected.get("min_citations")
+    required_source_types = [str(value) for value in list(expected.get("required_source_types") or []) if str(value).strip()]
+
+    pass_flags["required_all"] = all(value.lower() in answer_lc for value in required_all)
+    pass_flags["required_any"] = True if not required_any else any(value.lower() in answer_lc for value in required_any)
+    pass_flags["forbidden_any"] = not any(value.lower() in answer_lc for value in forbidden_any)
+    pass_flags["min_citations"] = True if min_citations is None else len(response.get("citations") or []) >= int(min_citations)
+    pass_flags["required_source_types"] = set(required_source_types).issubset(set(actual_source_types))
     overall = all(pass_flags.values())
-    answer = response.get("answer") or ""
     return {
         "check_id": item["check_id"],
         "question": item["question"],
@@ -49,11 +62,18 @@ def _evaluate_check(item: dict[str, Any], response: dict[str, Any], seconds: flo
         "actual": {
             "answer_mode": trace.get("answer_mode"),
             "source_strategy": trace.get("source_strategy"),
-            "source_types_applied": trace.get("source_types_applied"),
+            "source_types_applied": actual_source_types,
             "citations": len(response.get("citations") or []),
         },
         "passed": overall,
         "pass_flags": pass_flags,
+        "content_checks": {
+            "required_all": required_all,
+            "required_any": required_any,
+            "forbidden_any": forbidden_any,
+            "min_citations": min_citations,
+            "required_source_types": required_source_types,
+        },
         "first_lines": [line for line in answer.splitlines() if line.strip()][:8],
     }
 
@@ -92,6 +112,7 @@ def _render_markdown(plan: dict[str, Any], results: list[dict[str, Any]]) -> str
                 f"- Tid: {result['seconds']}s",
                 f"- Kilder: {result['actual'].get('citations')}",
                 f"- Status: {'PASS' if result['passed'] else 'FAIL'}",
+                f"- Pass-flagg: {json.dumps(result['pass_flags'], ensure_ascii=False, sort_keys=True)}",
                 "",
                 "Første linjer:",
             ]

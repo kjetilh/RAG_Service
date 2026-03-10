@@ -20,6 +20,7 @@ class AnswerModePlan:
     answer_contract: str | None = None
     planner_focus: str | None = None
     detail_level: str = "standard"
+    retrieval_hint: str | None = None
 
     def as_trace(self) -> dict[str, object]:
         return {
@@ -32,6 +33,7 @@ class AnswerModePlan:
             "default_prompt_case_id": self.default_prompt_case_id,
             "question_set_path": self.question_set_path,
             "detail_level": self.detail_level,
+            "retrieval_hint": self.retrieval_hint,
         }
 
 
@@ -89,6 +91,20 @@ DETAIL_PATTERNS = [
     "med sitater",
     "utfyllende",
     "dypt",
+]
+
+POLICY_PATTERNS = [
+    "politikk",
+    "politikkområde",
+    "innovasjonspolitikk",
+    "virkemiddel",
+    "virkemidler",
+    "virkemiddelapparat",
+    "fou",
+    "omstilling",
+    "rammebetingelse",
+    "rammebetingelser",
+    "norge",
 ]
 
 QUESTION_FINDINGS_PATTERNS = [
@@ -194,6 +210,18 @@ Hvis brukeren ber om kort svar, svar kort.
 Hvis brukeren ber om drøfting eller analyse, utvid de relevante delene."""
 
 
+INNOVATION_POLICY_GENERAL_FOCUS = (
+    "Hold svaret innen innovasjonspolitikk, virkemidler, omstilling og praktisk politikkutforming "
+    "for bokprosjektet. Hvis kildene i konteksten hovedsakelig peker mot andre innovasjonsdomener, "
+    "si at dekningen er svak i stedet for å gjøre det til hovedspor."
+)
+
+
+INNOVATION_POLICY_RETRIEVAL_HINT = (
+    "innovasjonspolitikk virkemidler virkemiddelapparat omstilling Norge FoU-politikk næringsutvikling"
+)
+
+
 INTERVIEW_QUESTION_SET_PATH = "config/interview_questions_innovasjonspolitikk.yml"
 
 
@@ -212,6 +240,10 @@ def _source_groups(source_types: Iterable[str]) -> tuple[list[str], list[str]]:
     return interviews, articles
 
 
+def _is_innovation_case(case_id: str | None) -> bool:
+    return bool(case_id and case_id.startswith("innovasjon"))
+
+
 def choose_answer_mode(
     *,
     message: str,
@@ -225,6 +257,7 @@ def choose_answer_mode(
     interview_hits = _word_hits(message_lc, INTERVIEW_PATTERNS)
     literature_hits = _word_hits(message_lc, LITERATURE_PATTERNS)
     writing_hits = _word_hits(message_lc, WRITING_PATTERNS)
+    policy_hits = _word_hits(message_lc, POLICY_PATTERNS)
 
     if _contains_any(message_lc, QUESTION_FINDINGS_PATTERNS):
         return AnswerModePlan(
@@ -324,17 +357,20 @@ def choose_answer_mode(
     source_strategy = "articles"
     if case_id == "innovasjon_bokskriving" and (literature_hits + writing_hits) > 0 and interviews:
         source_strategy = "hybrid" if writing_hits > literature_hits else "articles"
+    innovation_policy_scope = _is_innovation_case(case_id) and source_strategy == "articles" and policy_hits > 0
 
     return AnswerModePlan(
         answer_mode="general",
         source_strategy=source_strategy,
         response_shape="direct",
         streaming_allowed=(selected_domain == "docs" and source_strategy == "articles"),
-        rewrite_query=True,
+        rewrite_query=not innovation_policy_scope,
         use_subquery_planner=False,
         default_prompt_case_id=case_id,
         answer_contract=GENERAL_DIRECT_CONTRACT,
+        planner_focus=INNOVATION_POLICY_GENERAL_FOCUS if innovation_policy_scope else None,
         detail_level=detail_level,
+        retrieval_hint=INNOVATION_POLICY_RETRIEVAL_HINT if innovation_policy_scope else None,
     )
 
 

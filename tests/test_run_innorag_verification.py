@@ -22,18 +22,28 @@ def test_evaluate_check_marks_expected_mode_and_strategy():
             "check_id": "A1",
             "question": "Hei",
             "case_id": "innovasjon",
-            "expected": {"answer_mode": "general", "source_strategy": "articles"},
+            "expected": {
+                "answer_mode": "general",
+                "source_strategy": "articles",
+                "required_all": ["kort svar"],
+                "required_any": ["innovasjonspolitikk", "virkemidler"],
+                "forbidden_any": ["demokratisk innovasjon"],
+                "min_citations": 1,
+                "required_source_types": ["innovasjonsledelse"],
+            },
         },
         {
             "trace": {"answer_mode": "general", "source_strategy": "articles", "source_types_applied": ["innovasjonsledelse"]},
             "citations": [{"doc_id": "d1"}],
-            "answer": "Kort svar\nDetalj",
+            "answer": "Kort svar om innovasjonspolitikk.\nDetalj om virkemidler.",
         },
         1.2,
     )
 
     assert result["passed"] is True
     assert result["actual"]["citations"] == 1
+    assert result["pass_flags"]["required_all"] is True
+    assert result["pass_flags"]["forbidden_any"] is True
 
 
 def test_render_markdown_contains_summary_table():
@@ -48,7 +58,7 @@ def test_render_markdown_contains_summary_table():
                 "expected": {"answer_mode": "general", "source_strategy": "articles"},
                 "actual": {"answer_mode": "general", "source_strategy": "articles", "citations": 1},
                 "passed": True,
-                "pass_flags": {"answer_mode": True, "source_strategy": True},
+                "pass_flags": {"answer_mode": True, "source_strategy": True, "required_all": True},
                 "first_lines": ["Kort svar"],
             }
         ],
@@ -56,3 +66,4 @@ def test_render_markdown_contains_summary_table():
 
     assert "# test_plan" in markdown
     assert "| A1 | innovasjon | general | general | articles | articles | 1.2s | PASS |" in markdown
+    assert "Pass-flagg" in markdown

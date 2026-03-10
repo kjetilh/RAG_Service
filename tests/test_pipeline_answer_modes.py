@@ -144,24 +144,86 @@ def test_answer_question_passes_dynamic_contract_for_general_mode(monkeypatch):
         source_strategy="articles",
         response_shape="direct",
         streaming_allowed=True,
-        rewrite_query=True,
+        rewrite_query=False,
         use_subquery_planner=False,
         default_prompt_case_id="innovasjon",
         answer_contract=GENERAL_DIRECT_CONTRACT,
+        retrieval_hint="innovasjonspolitikk virkemidler",
     )
     monkeypatch.setattr(pipeline, "plan_query", lambda *_args, **_kwargs: _plan(mode))
 
     captured = {}
 
-    def _fake_run_planned_single_pass(**kwargs):
+    def _fake_retrieve_candidates(**kwargs):
         captured.update(kwargs)
+        return ([], kwargs["query"])
+
+    def _fake_render_response(**kwargs):
+        captured["render"] = kwargs
         return ChatResponse(answer="ok", citations=[], retrieval_debug={"query_plan": {"answer_mode": "general"}})
 
-    monkeypatch.setattr(pipeline, "_run_planned_single_pass", _fake_run_planned_single_pass)
+    monkeypatch.setattr(pipeline, "_retrieve_candidates", _fake_retrieve_candidates)
+    monkeypatch.setattr(pipeline, "_render_response", _fake_render_response)
 
-    pipeline.answer_question("Hva sier litteraturen om innovasjonspolitikk?")
+    pipeline._run_planned_single_pass(
+        message="Hva sier litteraturen om innovasjonspolitikk?",
+        plan=_plan(mode),
+        top_k=None,
+        model_profile=None,
+        prompt_profile_case_id=None,
+        answer_contract=GENERAL_DIRECT_CONTRACT,
+    )
 
-    assert captured["answer_contract"] == GENERAL_DIRECT_CONTRACT
+    assert captured["query"].startswith("Hva sier litteraturen om innovasjonspolitikk?")
+    assert captured["query"].endswith("innovasjonspolitikk virkemidler")
+    assert captured["render"]["answer_contract"] == GENERAL_DIRECT_CONTRACT
+    assert captured["render"]["extra_query_plan"]["retrieval_query_input"].endswith("innovasjonspolitikk virkemidler")
+
+
+def test_answer_question_formats_interview_gap_mode_without_technical_drift(monkeypatch):
+    mode = AnswerModePlan(
+        answer_mode="interview_gap_analysis",
+        source_strategy="interviews",
+        response_shape="interview_gaps",
+        streaming_allowed=False,
+        rewrite_query=False,
+        use_subquery_planner=False,
+        default_prompt_case_id="innovasjon_intervjuer",
+        question_set_path="config/interview_questions_innovasjonspolitikk.yml",
+    )
+    monkeypatch.setattr(pipeline, "plan_query", lambda *_args, **_kwargs: _plan(mode))
+    monkeypatch.setattr(
+        pipeline,
+        "prepare_question_set",
+        lambda **_kwargs: SimpleNamespace(
+            question_set_id="qs-1",
+            questions=[
+                SimpleNamespace(question_id="Q1", text="Hva fungerer?"),
+                SimpleNamespace(question_id="Q2", text="Hva mangler?"),
+            ],
+        ),
+    )
+    bundles = [
+        {"effective_query": "Hva fungerer?", "citations": [_citation(1)]},
+        {"effective_query": "Hva mangler?", "citations": [_citation(2), _citation(3)]},
+    ]
+    monkeypatch.setattr(pipeline, "_retrieve_structured_bundle", lambda **_kwargs: bundles.pop(0))
+    monkeypatch.setattr(
+        pipeline,
+        "_summarize_structured_items",
+        lambda **_kwargs: {
+            "Q1": {"summary": "Lite konkret om hva som faktisk fungerer.", "coverage": "low", "warning": None},
+            "Q2": {"summary": "Noe bedre dekning, men fortsatt begrenset.", "coverage": "medium", "warning": None},
+        },
+    )
+
+    resp = pipeline.answer_question("Hvilke spørsmål eller temaer har svakest dekning i intervjuene?")
+
+    assert "## Svakest dekning i intervjuene" in resp.answer
+    assert "## Hva som mangler" in resp.answer
+    assert "API-adferd" not in resp.answer
+    assert "Q1" in resp.answer
+    assert resp.retrieval_debug["query_plan"]["answer_mode"] == "interview_gap_analysis"
 
 
 def test_answer_question_stream_emits_status_for_non_streaming_modes(monkeypatch):
