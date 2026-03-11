@@ -6,6 +6,7 @@ from app.rag.cases.loader import EvaluationConfig
 from app.rag.planner.answer_modes import (
     AnswerModePlan,
     GENERAL_DIRECT_CONTRACT,
+    WORKSPACE_CASE_SWITCH_CONTRACT,
     WORKSPACE_RECIPE_CONTRACT,
 )
 from app.rag.planner.deterministic import PlanResult
@@ -230,6 +231,56 @@ def test_answer_question_passes_workspace_recipe_contract(monkeypatch):
     assert captured["render"]["answer_contract"] == WORKSPACE_RECIPE_CONTRACT
     assert "arbeidsromsoppskrifter" in captured["render"]["router_instruction"]
     assert captured["render"]["extra_query_plan"]["retrieval_query_input"].endswith("RAGCaseCatalogCell RAGQueryCell")
+
+
+def test_answer_question_passes_case_switch_workspace_contract(monkeypatch):
+    mode = AnswerModePlan(
+        answer_mode="workspace_recipe",
+        source_strategy="articles",
+        response_shape="workspace_recipe",
+        streaming_allowed=False,
+        rewrite_query=False,
+        use_subquery_planner=False,
+        default_prompt_case_id="dimy_prompts",
+        answer_contract=WORKSPACE_CASE_SWITCH_CONTRACT,
+        planner_focus="Prioriter dokumentert case-bytte for research-klienter.",
+        retrieval_hint="research client case_guidance suggested_case_id dimy_docs dimy_prompts",
+    )
+
+    def _plan_dimy() -> PlanResult:
+        return PlanResult(
+            filters={"source_type": ["prompt_docs"]},
+            retrieval={"top_k_vector": 5, "top_k_lexical": 5, "top_k_final": 5, "max_chunks_per_doc": 3},
+            trace={"planner_mode": "deterministic", **mode.as_trace()},
+            prompt_instruction=None,
+            case_id="dimy_prompts",
+            evaluation=EvaluationConfig(min_citations=1, min_unique_docs=1, min_avg_score=0.0, enforce=False),
+            answer_mode=mode,
+        )
+
+    monkeypatch.setattr(pipeline, "plan_query", lambda *_args, **_kwargs: _plan_dimy())
+
+    captured = {}
+
+    def _fake_retrieve_candidates(**kwargs):
+        captured.update(kwargs)
+        return ([], kwargs["query"])
+
+    def _fake_render_response(**kwargs):
+        captured["render"] = kwargs
+        return ChatResponse(answer="ok", citations=[], retrieval_debug={"query_plan": {"answer_mode": "workspace_recipe"}})
+
+    monkeypatch.setattr(pipeline, "_retrieve_candidates", _fake_retrieve_candidates)
+    monkeypatch.setattr(pipeline, "_render_response", _fake_render_response)
+
+    pipeline.answer_question("Hvordan bør en research-klient bytte case mellom dimy_docs og dimy_prompts?")
+
+    assert captured["query"].endswith("case_guidance suggested_case_id dimy_docs dimy_prompts")
+    assert captured["render"]["answer_contract"] == WORKSPACE_CASE_SWITCH_CONTRACT
+    assert "case-bytte" in captured["render"]["router_instruction"]
+    assert captured["render"]["extra_query_plan"]["retrieval_query_input"].endswith(
+        "case_guidance suggested_case_id dimy_docs dimy_prompts"
+    )
 
 
 def test_answer_question_formats_interview_gap_mode_without_technical_drift(monkeypatch):

@@ -1,4 +1,5 @@
 from app.rag.planner.answer_modes import (
+    WORKSPACE_CASE_SWITCH_CONTRACT,
     WORKSPACE_RECIPE_CONTRACT,
     choose_answer_mode,
     source_types_for_strategy,
@@ -97,3 +98,20 @@ def test_choose_answer_mode_uses_workspace_recipe_for_dimy_prompts_case():
     assert plan.default_prompt_case_id == "dimy_prompts"
     assert plan.answer_contract == WORKSPACE_RECIPE_CONTRACT
     assert "RAGQueryCell" in (plan.retrieval_hint or "")
+
+
+def test_choose_answer_mode_uses_case_switch_contract_for_dimy_prompts_research_client_question():
+    plan = choose_answer_mode(
+        message="Hvordan bør en research-klient bytte case mellom dimy_docs og dimy_prompts?",
+        case_id="dimy_prompts",
+        docs_source_types=["prompt_docs"],
+        selected_domain="docs",
+    )
+
+    assert plan.answer_mode == "workspace_recipe"
+    assert plan.source_strategy == "articles"
+    assert plan.streaming_allowed is False
+    assert plan.rewrite_query is False
+    assert plan.default_prompt_case_id == "dimy_prompts"
+    assert plan.answer_contract == WORKSPACE_CASE_SWITCH_CONTRACT
+    assert "case_guidance" in (plan.retrieval_hint or "")

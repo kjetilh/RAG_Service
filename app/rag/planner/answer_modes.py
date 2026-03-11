@@ -170,6 +170,19 @@ WORKSPACE_RECIPE_PATTERNS = [
     "hvilken celle",
 ]
 
+CASE_SWITCH_PATTERNS = [
+    "research-klient",
+    "research klient",
+    "bytte case",
+    "skifte case",
+    "switch case",
+    "suggested_case_id",
+    "case_guidance",
+    "dimy_docs og dimy_prompts",
+    "dimy_docs",
+    "dimy_prompts",
+]
+
 
 GENERAL_DIRECT_CONTRACT = """Svar direkte på spørsmålet med bare de delene som faktisk hjelper.
 Bruk korte mellomtitler bare når de gjør svaret tydeligere.
@@ -252,6 +265,28 @@ Ikke foreslå udokumenterte celler, skjermflyter eller capabilities.
 Hvis ingen dokumentert oppskrift passer godt nok, si det eksplisitt."""
 
 
+WORKSPACE_CASE_SWITCH_CONTRACT = """## Kort anbefaling
+Si hvilket case klienten normalt bør starte i, og når den bør bytte.
+
+## Dokumentert klientflyt
+Beskriv den dokumenterte flyten steg for steg for en research-klient som må velge mellom `dimy_docs` og `dimy_prompts`.
+
+## Maskinlesbart signal
+Forklar eksplisitt hvordan `retrieval_debug.query_plan.case_guidance` og `suggested_case_id` skal brukes når det finnes i svaret.
+
+## Hvordan settes dette sammen
+Beskriv et konkret klientmønster i praktiske steg. Start med det enkleste dokumenterte oppsettet som dekker behovet.
+
+## Når dette passer
+Si kort når klienten bør bli i valgt case, og når den bør spørre på nytt i et annet case.
+
+## Begrensninger og manglende dokumentasjon
+Si tydelig hva kildene ikke dekker, eller hva som bare er svakere dokumentert.
+
+Ikke foreslå udokumentert klientlogikk.
+Hvis case-bytte ikke er dokumentert i kildene, si det eksplisitt."""
+
+
 INNOVATION_POLICY_GENERAL_FOCUS = (
     "Hold svaret innen innovasjonspolitikk, virkemidler, omstilling og praktisk politikkutforming "
     "for bokprosjektet. Hvis kildene i konteksten hovedsakelig peker mot andre innovasjonsdomener, "
@@ -268,6 +303,13 @@ WORKSPACE_RECIPE_RETRIEVAL_HINT = (
     "arbeidsrom workspace oppskrift RAGCaseCatalogCell RAGQueryCell "
     "RAGCorpusExplorerCell RAGDocumentLinksCell RAGCaseMembersAdminCell "
     "router katalog prompt-admin prompt admin"
+)
+
+
+WORKSPACE_CASE_SWITCH_RETRIEVAL_HINT = (
+    "research client research-klient case_guidance suggested_case_id "
+    "dimy_docs dimy_prompts /v1/research/query case bytte skifte case "
+    "post /v1/research/query retrieval_debug query_plan"
 )
 
 
@@ -307,6 +349,24 @@ def choose_answer_mode(
     literature_hits = _word_hits(message_lc, LITERATURE_PATTERNS)
     writing_hits = _word_hits(message_lc, WRITING_PATTERNS)
     policy_hits = _word_hits(message_lc, POLICY_PATTERNS)
+
+    if case_id == "dimy_prompts" and _contains_any(message_lc, CASE_SWITCH_PATTERNS):
+        return AnswerModePlan(
+            answer_mode="workspace_recipe",
+            source_strategy="articles",
+            response_shape="workspace_recipe",
+            streaming_allowed=False,
+            rewrite_query=False,
+            use_subquery_planner=False,
+            default_prompt_case_id="dimy_prompts",
+            answer_contract=WORKSPACE_CASE_SWITCH_CONTRACT,
+            planner_focus=(
+                "Prioriter dokumentert case-bytte for research-klienter, eksplisitte referanser til "
+                "`case_guidance` og `suggested_case_id`, og et konkret klientforlop med minst mulig gjetning."
+            ),
+            detail_level=detail_level,
+            retrieval_hint=WORKSPACE_CASE_SWITCH_RETRIEVAL_HINT,
+        )
 
     if case_id == "dimy_prompts" and (
         _contains_any(message_lc, WORKSPACE_RECIPE_PATTERNS) or selected_domain == "docs"
