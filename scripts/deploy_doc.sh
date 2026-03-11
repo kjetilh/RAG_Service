@@ -7,13 +7,14 @@ COMPOSE_FILE="$ROOT_DIR/docker/docker-compose.vps.yml"
 SERVICE="rag_dimy_api"
 HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:${RAG_DIMY_API_PORT:-8102}/health}"
 COMPOSE_ARGS=(--env-file "$ENV_FILE" -f "$COMPOSE_FILE")
+IMAGE_TAG="${IMAGE_TAG:-$(basename "$(dirname "$COMPOSE_FILE")")-${SERVICE}}"
 
 if [[ ! -f "$ENV_FILE" ]]; then
   echo "Missing env file: $ENV_FILE" >&2
   exit 1
 fi
 
-docker compose "${COMPOSE_ARGS[@]}" build "$SERVICE"
+DOCKER_BUILDKIT=0 docker build -t "$IMAGE_TAG" -f "$ROOT_DIR/docker/Dockerfile" "$ROOT_DIR"
 
 container_id="$(docker compose "${COMPOSE_ARGS[@]}" ps -q "$SERVICE" || true)"
 if [[ -n "$container_id" ]]; then
