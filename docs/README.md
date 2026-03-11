@@ -10,6 +10,7 @@ Denne mappen inneholder driftsnotater og arbeidsdokumenter.
 
 - `DEPLOY_VPS.md`: konkret VPS-oppsett for testing med flere brukere.
 - `DEPLOY_VPS_MULTI_RAG.md`: VPS-oppsett for flere domene-RAG-er + scaffold-tilgang.
+- `VPS_DEPLOY_RUNBOOK.md`: kanonisk deploy-sti for `innorag` og `doc` via repo-script.
 - `VPS_BRUKERE_OG_TILGANG.md`: anbefalt bruker-/gruppeoppsett og tilgangsmodell på VPS.
 - `VPS_DOCKER_SETUP.md`: Docker Engine + Compose-oppsett på Hetzner VPS.
 - `VPS_NGINX_IP_DEPLOY.md`: Nginx-oppsett med IP-basert HTTPS (self-signed) og deploystatus.
@@ -23,7 +24,17 @@ Denne mappen inneholder driftsnotater og arbeidsdokumenter.
 - `SCAFFOLD_CELL_PROMPTS.md`: promptmaler for router-celle og domene-celler.
 - `SYNC_ORCHESTRATOR.md`: orchestrering av kontinuerlig synk mellom flere repoer og dokumentasjons-RAG.
 - `NEXTGEN_ROLLBACK_NOTES.md`: rollback-strategi per commit for next-gen RAG-endringer.
+- `RAG_SERVICE_API_ENDPUNKTER.md`: eksplisitt inventar over alle registrerte HTTP-endepunkter og auth-grupper.
+- `RAG_CASES_SCHEMA.md`: schema og semantikk for `config/rag_cases.yml`.
+- `DOC_LIFECYCLE_TOMBSTONES.md`: hvordan `doc_state`, `doc_version`, `delete_missing` og tombstones fungerer.
+- `QUERY_PLAN_TRACE_SCHEMA.md`: dokumentert shape for `query_plan`, `trace` og `evaluation_gate`.
 - `DEEP_RESEARCH_RAG_VERKTOY_PROMPT.md`: kontekstpakke og ferdig prompt til ChatGPT Deep Research.
+- `INTERVIEW_RAG_EVALUATION.md`: evaluering og anbefalt arkitektur for intervju-RAG.
+- `INTERVIEW_RAG_RUNBOOK.md`: praktisk runbook for ingest/query mot intervju-case.
+- `INNORAG_BOKSKRIVING_RUNBOOK.md`: konkret oppsett for bokskriving med artikler + intervjuer i `innorag`.
+- `DEEP_RESEARCH_INTERVIEW_RAG_PROMPT.md`: ferdig Deep Research-prompt for intervju-RAG.
+- `CELLPROTOCOL_RAG_STATUS.md`: status og anbefalt retning for a gjore RAG tilgjengelig via `CellConfiguration` og skeleton.
+- `CHATGPT_PRO_CELLPROTOCOL_RAG_PROMPT.md`: stram prompt for ekstern ChatGPT Pro-vurdering av RAG -> CellProtocol-integrasjonen.
 - `MULTI_RAG_ITERASJON_LOGG.md`: logg over iterasjonsleveranser.
 - `Makefile`: hjelpekommandoer for lokal drift.
 
@@ -31,3 +42,4 @@ Denne mappen inneholder driftsnotater og arbeidsdokumenter.
 
 - Hold `README.md` oppdatert først.
 - Bruk filer i `docs/` til utdypende detaljer eller historikk.
+- For API-sporsmal: bruk `docs/RAG_SERVICE_API_ENDPUNKTER.md` som kanonisk inventar.
