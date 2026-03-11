@@ -23,6 +23,10 @@
     .split { display:grid; grid-template-columns: 2fr 1fr; gap: 12px; }
     @media (max-width: 900px) { .split { grid-template-columns: 1fr; } }
     .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+    .hint { margin-top:8px; padding:10px 12px; border-radius:10px; border:1px solid #d9e7ff; background:#f5f9ff; color:#163963; font-size:13px; line-height:1.35; }
+    .hint strong { display:block; margin-bottom:4px; }
+    .hint button { margin-top:8px; padding:6px 10px; font-size:13px; }
+    .hidden { display:none; }
   </style>
 </head>
 <body>
@@ -40,6 +44,7 @@
         <select id="caseId" style="width:100%; padding:10px; font-size:14px;">
           <option value="">standard</option>
         </select>
+        <div id="caseMeta" class="hint hidden"></div>
       </div>
       <textarea id="q" placeholder="Skriv spørsmålet ditt her..."></textarea>
       <div style="display:flex; flex-direction:column; gap:8px;">
@@ -47,6 +52,7 @@
         <button id="stop" disabled>Stopp</button>
       </div>
     </div>
+    <div id="queryHint" class="hint hidden"></div>
 
     <div class="split">
       <div class="panel">
@@ -88,8 +94,11 @@
   const debugEl = $("debug");
   const citCountEl = $("citCount");
   const modeEl = $("mode");
+  const caseMetaEl = $("caseMeta");
+  const queryHintEl = $("queryHint");
 
   let aborter = null;
+  let caseMap = new Map();
 
   function setStatus(text) {
     statusEl.textContent = text;
@@ -106,6 +115,8 @@
     debugEl.textContent = "";
     citCountEl.textContent = "0";
     modeEl.textContent = "streaming";
+    queryHintEl.classList.add("hidden");
+    queryHintEl.innerHTML = "";
   }
 
   function escapeHtml(s) {
@@ -146,12 +157,88 @@
   function renderCaseOptions(cases) {
     const requested = new URLSearchParams(window.location.search).get("case_id") || "";
     cases.forEach((item) => {
+      caseMap.set(item.case_id, item);
       const opt = document.createElement("option");
       opt.value = item.case_id;
       opt.textContent = item.description ? `${item.case_id} · ${item.description}` : item.case_id;
       if (item.case_id === requested) opt.selected = true;
       caseIdEl.appendChild(opt);
     });
+    renderCaseMeta();
+    renderQueryHint();
+  }
+
+  function looksLikeCompositionQuestion(message) {
+    const text = String(message || "").toLowerCase();
+    if (!text.trim()) return false;
+    const phrases = [
+      "sette sammen",
+      "sett sammen",
+      "hvordan kan jeg sette sammen",
+      "hvordan setter jeg sammen",
+      "valg av byggesteiner",
+      "brukeroppsett",
+    ];
+    if (phrases.some((phrase) => text.includes(phrase))) return true;
+    const words = new Set((text.match(/\w+/g) || []));
+    let hits = 0;
+    [
+      "arbeidsrom",
+      "workspace",
+      "komponent",
+      "komponenter",
+      "byggestein",
+      "byggesteiner",
+      "celle",
+      "celler",
+      "oppsett",
+      "sammensette",
+      "sammensetning",
+    ].forEach((word) => {
+      if (words.has(word)) hits += 1;
+    });
+    return hits >= 2;
+  }
+
+  function renderCaseMeta() {
+    const selected = caseMap.get(caseIdEl.value || "");
+    if (!selected || (!selected.intended_for && !selected.use_when && !selected.avoid_when)) {
+      caseMetaEl.classList.add("hidden");
+      caseMetaEl.innerHTML = "";
+      return;
+    }
+    const parts = [];
+    if (selected.intended_for) parts.push(`<strong>Dette caset er for</strong>${escapeHtml(selected.intended_for)}`);
+    if (selected.use_when) parts.push(`<div><span class="muted">Bruk når:</span> ${escapeHtml(selected.use_when)}</div>`);
+    if (selected.avoid_when) parts.push(`<div><span class="muted">Unngå når:</span> ${escapeHtml(selected.avoid_when)}</div>`);
+    caseMetaEl.innerHTML = parts.join("");
+    caseMetaEl.classList.remove("hidden");
+  }
+
+  function renderQueryHint(fromServer) {
+    const selected = caseMap.get(caseIdEl.value || "");
+    const needsCompositionHint = caseIdEl.value === "dimy_docs" && looksLikeCompositionQuestion(q.value);
+    if (!needsCompositionHint && !fromServer) {
+      queryHintEl.classList.add("hidden");
+      queryHintEl.innerHTML = "";
+      return;
+    }
+    const suggestedCaseId = (fromServer && fromServer.suggested_case_id)
+      || (selected && selected.preferred_alternative_case_id)
+      || "dimy_prompts";
+    const message = (fromServer && fromServer.message)
+      || "Dette spørsmålet ser ut som brukerrettet cellesammensetning. Bruk dimy_prompts for arbeidsrom, byggesteiner og dokumenterte oppskrifter.";
+    queryHintEl.innerHTML = `<strong>Case-hint</strong>${escapeHtml(message)}
+      <div><button type="button" id="switchSuggestedCase">Bytt til ${escapeHtml(suggestedCaseId)}</button></div>`;
+    queryHintEl.classList.remove("hidden");
+    const btn = $("switchSuggestedCase");
+    if (btn) {
+      btn.onclick = () => {
+        caseIdEl.value = suggestedCaseId;
+        renderCaseMeta();
+        renderQueryHint();
+      };
+    }
   }
 
   async function loadCases() {
@@ -229,6 +316,7 @@
           if (obj.streaming_allowed === false) {
             setStatus("arbeider …");
           }
+          renderQueryHint(obj.case_guidance || null);
         } catch (e) {
           logDebug("query_plan parse error: " + e);
         }
@@ -329,6 +417,15 @@
     if ((ev.ctrlKey || ev.metaKey) && ev.key === "Enter") {
       sendBtn.click();
     }
+  });
+
+  q.addEventListener("input", () => {
+    renderQueryHint();
+  });
+
+  caseIdEl.addEventListener("change", () => {
+    renderCaseMeta();
+    renderQueryHint();
   });
 
   loadCases();

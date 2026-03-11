@@ -27,6 +27,7 @@ from app.api.routes_cell import (
 from app.api.routes_chat import _document_file_path, _resolve_download_path, _run_query
 from app.models.schemas import Citation, QueryRequest, QueryResponse
 from app.rag.access.control import case_exists
+from app.rag.cases.guidance import case_guidance
 from app.rag.cases.loader import load_rag_cases
 from app.rag.cases.visibility import visible_case_ids
 from app.rag.generate.llm_provider import ModelProfileError
@@ -350,7 +351,13 @@ def research_cases(identity: ResearchIdentity = Depends(_resolve_research_identi
     cfg = load_rag_cases(settings.rag_cases_path)
     allowed_case_ids = _allowed_case_ids(identity)
     items = [
-        CaseSummary(case_id=case.case_id, description=case.description, enabled=bool(case.enabled), role=None)
+        CaseSummary(
+            case_id=case.case_id,
+            description=case.description,
+            enabled=bool(case.enabled),
+            role=None,
+            **case_guidance(case.case_id),
+        )
         for case in cfg.cases
         if case.enabled and case.case_id in allowed_case_ids
     ]

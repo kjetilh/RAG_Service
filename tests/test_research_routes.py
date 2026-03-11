@@ -72,6 +72,26 @@ def test_research_cases_filters_to_allowed_enabled_cases(monkeypatch):
     assert [case.case_id for case in resp.cases] == ["doc_case"]
 
 
+def test_research_cases_include_guidance_for_known_doc_cases(monkeypatch):
+    monkeypatch.setattr(
+        routes_research,
+        "load_rag_cases",
+        lambda _path: RagCasesConfig(
+            version=1,
+            default_case="dimy_docs",
+            cases=[
+                RagCase(case_id="dimy_docs", description="Docs", enabled=True, planner=PlannerConfig()),
+                RagCase(case_id="dimy_prompts", description="Prompts", enabled=True, planner=PlannerConfig()),
+            ],
+        ),
+    )
+
+    resp = routes_research.research_cases(identity=_identity("research:read", case_ids=["dimy_docs", "dimy_prompts"]))
+    by_id = {case.case_id: case for case in resp.cases}
+    assert by_id["dimy_docs"].preferred_alternative_case_id == "dimy_prompts"
+    assert by_id["dimy_prompts"].preferred_alternative_case_id == "dimy_docs"
+
+
 def test_research_query_rewrites_download_urls_with_signed_grant(monkeypatch):
     monkeypatch.setattr(routes_research, "_require_case_access", lambda *_args: None)
     monkeypatch.setattr(routes_research.time, "time", lambda: 1_700_000_000)

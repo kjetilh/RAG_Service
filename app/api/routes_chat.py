@@ -5,6 +5,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import text
 
 from app.models.schemas import ChatRequest, ChatResponse, QueryRequest, QueryResponse
+from app.rag.cases.guidance import case_guidance, query_case_guidance
 from app.rag.cases.loader import case_by_id, load_rag_cases
 from app.rag.cases.visibility import visible_case_ids, visible_cases
 from app.rag.generate.llm_provider import ModelProfileError, validate_model_profile
@@ -92,7 +93,7 @@ def _validate_case_visibility(case_id: str | None, prompt_profile_case_id: str |
 def _run_query(req: QueryRequest):
     validate_model_profile(req.model_profile)
     _validate_case_visibility(req.case_id, req.prompt_profile_case_id)
-    return answer_question(
+    response = answer_question(
         message=req.query,
         conversation_id=req.conversation_id,
         filters=_filters_with_case(req.filters, req.case_id),
@@ -100,6 +101,16 @@ def _run_query(req: QueryRequest):
         model_profile=req.model_profile,
         prompt_profile_case_id=req.prompt_profile_case_id,
     )
+    if (
+        req.case_id
+        and response.retrieval_debug
+        and isinstance(response.retrieval_debug, dict)
+        and isinstance(response.retrieval_debug.get("query_plan"), dict)
+    ):
+        guidance = query_case_guidance(req.case_id, req.query)
+        if guidance:
+            response.retrieval_debug["query_plan"]["case_guidance"] = guidance
+    return response
 
 
 @router.get("/v1/cases")
@@ -112,6 +123,7 @@ def list_cases():
                 "case_id": case.case_id,
                 "description": case.description,
                 "enabled": case.enabled,
+                **case_guidance(case.case_id),
             }
             for case in visible_cases(cfg, available_source_types=available_source_types)
         ]

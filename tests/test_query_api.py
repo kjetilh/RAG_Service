@@ -107,3 +107,19 @@ def test_list_cases_only_returns_enabled_cases(monkeypatch):
     resp = routes_chat.list_cases()
 
     assert resp == {"cases": [{"case_id": "innovasjon", "description": "A", "enabled": True}]}
+
+
+def test_run_query_adds_case_guidance_for_dimy_docs_composition_question(monkeypatch):
+    monkeypatch.setattr(routes_chat, "validate_model_profile", lambda _: None)
+    monkeypatch.setattr(
+        routes_chat,
+        "load_rag_cases",
+        lambda _path: type("Cfg", (), {"cases": [], "default_case": "dimy_docs"})(),
+    )
+    monkeypatch.setattr(routes_chat, "case_by_id", lambda _cfg, case_id: type("Case", (), {"case_id": case_id})())
+    monkeypatch.setattr(routes_chat, "answer_question", lambda **_kwargs: _resp_with_plan())
+
+    resp = routes_chat._run_query(QueryRequest(query="Hvordan setter jeg sammen celler i et arbeidsrom?", case_id="dimy_docs"))
+
+    hint = resp.retrieval_debug["query_plan"]["case_guidance"]
+    assert hint["suggested_case_id"] == "dimy_prompts"

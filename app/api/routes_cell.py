@@ -55,6 +55,10 @@ class CaseSummary(BaseModel):
     description: str
     enabled: bool
     role: str | None = None
+    intended_for: str | None = None
+    use_when: str | None = None
+    avoid_when: str | None = None
+    preferred_alternative_case_id: str | None = None
 
 
 class CasesResponse(BaseModel):
