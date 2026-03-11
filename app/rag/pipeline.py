@@ -334,6 +334,20 @@ def _render_response(
         extra_fields=extra_query_plan,
     )
 
+    citations = packed.citations
+    if not citations:
+        packed.debug["evaluation_gate"] = run_evaluation_gate(citations, plan.evaluation)
+        return ChatResponse(
+            answer=(
+                "Ikke dokumentert i kildene.\n\n"
+                "Jeg fant ingen relevante dokumenterte kilder i denne casen for sporsmalet. "
+                "Prov a snevre inn sporsmalet, bruk mer konkrete dokumenterte begreper, "
+                "eller velg et annet case hvis du forventer svar fra et annet kunnskapsdomene."
+            ),
+            citations=[],
+            retrieval_debug=packed.debug,
+        )
+
     with _LLM_SEM:
         answer = compose_answer(
             message,
@@ -344,7 +358,6 @@ def _render_response(
             answer_contract=answer_contract,
         )
 
-    citations = packed.citations
     if _wants_quotes(message):
         answer = _append_documented_quotes(answer, citations)
     strict_grounding_check(answer, citations)

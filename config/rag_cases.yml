@@ -29,8 +29,8 @@ cases:
     planner:
       docs_source_types: ["prompt_docs"]
       prompts_source_types: ["dimy_prompts"]
-      docs_keywords: ["celle", "celler", "komponent", "komponenter", "sammensette", "sammensetning", "workspace", "skjelett", "skeleton", "konfigurasjon", "formål", "interesser"]
-      prompt_keywords: ["prompt", "prompts", "system prompt", "template", "mal", "cell", "cells", "component", "components", "setup", "configuration"]
+      docs_keywords: ["dokumentasjon", "guide", "veiledning", "oversikt", "referanse", "policy"]
+      prompt_keywords: ["prompt", "prompts", "system prompt", "template", "mal", "cell", "cells", "celle", "celler", "component", "components", "komponent", "komponenter", "setup", "configuration", "konfigurasjon", "arbeidsrom", "workspace", "skjelett", "skeleton", "sammensette", "sammensetning", "formål", "interesser"]
       default_domain: prompts
     retrieval:
       top_k_vector: 50

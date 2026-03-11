@@ -101,3 +101,40 @@ def test_plan_query_legacy_mode_still_works():
     result = plan_query("prompt", {})
     assert result.trace["planner_mode"] == "legacy_router"
     assert result.trace["selected_case"] is None
+
+
+def test_plan_query_dimy_prompts_prefers_prompt_domain_for_component_queries(tmp_path: Path):
+    settings.next_gen_rag_enabled = True
+    cases_path = tmp_path / "cases.yml"
+    cases_path.write_text(
+        """
+version: 1
+default_case: dimy_prompts
+cases:
+  - case_id: dimy_prompts
+    planner:
+      docs_source_types: ["prompt_docs"]
+      prompts_source_types: ["dimy_prompts"]
+      docs_keywords: ["guide", "oversikt", "referanse"]
+      prompt_keywords: ["celle", "celler", "komponent", "komponenter", "arbeidsrom", "workspace", "sammensette", "konfigurasjon"]
+      default_domain: prompts
+    retrieval:
+      top_k_vector: 8
+      top_k_lexical: 7
+      top_k_final: 6
+      max_chunks_per_doc: 2
+    evaluation:
+      min_citations: 2
+      min_unique_docs: 1
+      min_avg_score: 0.0
+      enforce: false
+""",
+        encoding="utf-8",
+    )
+    settings.rag_cases_path = str(cases_path)
+
+    result = plan_query("Hvordan setter jeg sammen celler som komponenter i et arbeidsrom?", {"rag_case_id": "dimy_prompts"})
+
+    assert result.case_id == "dimy_prompts"
+    assert result.filters["source_type"] == ["dimy_prompts"]
+    assert result.trace["selected_domain"] == "prompts"
