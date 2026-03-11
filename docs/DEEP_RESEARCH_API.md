@@ -217,6 +217,8 @@ Dette er spesielt nyttig pa `doc.haven.digipomps.org`, der:
 - `dimy_docs` dekker utvikler- og kodeassistentsporsmal
 - `dimy_prompts` dekker brukerrettet cellesammensetning og arbeidsrom
 
+Se ogsa `docs/DEEP_RESEARCH_CALL_SEQUENCES.md` for konkrete kallsekvenser og eksempelqueries.
+
 ### Eksempler
 
 Bruk `dimy_docs` for:
