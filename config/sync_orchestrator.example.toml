@@ -33,6 +33,13 @@ target_subdir = "cellprotocol/CellScaffold"
 [[source]]
 name = "CellScaffoldPrompts"
 repo_path = "/srv/ops/repos/CellScaffold"
-source_type = "dimy_prompts"
+source_type = "internal_prompts"
 target_subdir = "cellprotocol/CellScaffoldPrompts"
 include = ["**/*prompt*.md", "**/*Prompt*.md", "**/*.prompt", "prompts/**/*.md"]
+
+[[source]]
+name = "RAGServiceCellCompositionDocs"
+repo_path = "/srv/ops/repos/RAG_Service"
+source_type = "prompt_docs"
+target_subdir = "RAG_Service/CellCompositionDocs"
+include = ["docs/cell_composition/**/*.md"]

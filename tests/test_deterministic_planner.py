@@ -114,10 +114,10 @@ cases:
   - case_id: dimy_prompts
     planner:
       docs_source_types: ["prompt_docs"]
-      prompts_source_types: ["dimy_prompts"]
-      docs_keywords: ["guide", "oversikt", "referanse"]
-      prompt_keywords: ["celle", "celler", "komponent", "komponenter", "arbeidsrom", "workspace", "sammensette", "konfigurasjon"]
-      default_domain: prompts
+      prompts_source_types: []
+      docs_keywords: ["guide", "oversikt", "referanse", "celle", "celler", "komponent", "komponenter", "arbeidsrom", "workspace", "sammensette", "konfigurasjon"]
+      prompt_keywords: []
+      default_domain: docs
     retrieval:
       top_k_vector: 8
       top_k_lexical: 7
@@ -136,5 +136,5 @@ cases:
     result = plan_query("Hvordan setter jeg sammen celler som komponenter i et arbeidsrom?", {"rag_case_id": "dimy_prompts"})
 
     assert result.case_id == "dimy_prompts"
-    assert result.filters["source_type"] == ["dimy_prompts"]
-    assert result.trace["selected_domain"] == "prompts"
+    assert result.filters["source_type"] == ["prompt_docs"]
+    assert result.trace["selected_domain"] == "docs"
