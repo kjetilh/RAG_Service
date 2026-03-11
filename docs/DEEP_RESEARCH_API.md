@@ -115,6 +115,14 @@ Respons:
 
 Hvis tokenet har `research:download`, blir `citation.download_url` satt til et research-beskyttet download-endepunkt.
 
+Hvis klienten spurte i et case som ser feil ut for sporsmalet, kan `retrieval_debug.query_plan.case_guidance` returnere:
+
+- `level`
+- `message`
+- `suggested_case_id`
+
+Det er et signal om at klienten bor sporre pa nytt i et annet case i stedet for a stole pa et bredt eller svakt svar fra feil corpus.
+
 ### `GET /v1/research/cases/{case_id}/corpus`
 
 Query-parametre:
@@ -191,6 +199,23 @@ Velg `dimy_prompts` nar sporsmalet handler om:
 - routervalg og komposisjonsoppskrifter
 
 Hvis en research-klient starter i feil case, bor den si det eksplisitt og bytte case i stedet for a svare bredt fra feil corpus.
+
+### Anbefalt klientmønster
+
+For research-klienter som skal velge case automatisk:
+
+1. kall `GET /v1/research/cases`
+2. velg beste case ut fra sporsmalet
+3. kall `POST /v1/research/query`
+4. hvis `retrieval_debug.query_plan.case_guidance.suggested_case_id` finnes:
+   - rapporter kort at forste case var et mismatch
+   - kall `POST /v1/research/query` pa nytt med det foreslatte caset
+   - bruk det andre svaret som primart svargrunnlag
+
+Dette er spesielt nyttig pa `doc.haven.digipomps.org`, der:
+
+- `dimy_docs` dekker utvikler- og kodeassistentsporsmal
+- `dimy_prompts` dekker brukerrettet cellesammensetning og arbeidsrom
 
 ### Eksempler
 

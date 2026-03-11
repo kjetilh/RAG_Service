@@ -32,6 +32,7 @@ API workflow:
    - `DEEP_RESEARCH_API`
 5. If needed, inspect `GET /v1/research/cases/{case_id}/links` or `.../documents/{doc_id}/links`.
 6. If needed, open `download_url` from citations to inspect the actual source document. Treat the returned download URL as a short-lived capability link.
+7. If `retrieval_debug.query_plan.case_guidance.suggested_case_id` is present, state that the first case was a mismatch and repeat the query in the suggested case before drawing conclusions.
 
 Output requirements:
 1. Start with a short answer.
@@ -51,6 +52,7 @@ Guardrails:
 5. If `RAG_SERVICE_API_ENDPUNKTER` is absent from the retrieved corpus, say the endpoint inventory may be incomplete before answering.
 6. Prefer docs-ground-truth over prompt-ground-truth for API/runtime questions.
 7. If the selected case does not match the question type, say so explicitly and switch to the better case before making strong claims.
+8. Treat `query_plan.case_guidance` as stronger evidence for case selection than your own guesswork.
 ```
 
 Tilpasning:
