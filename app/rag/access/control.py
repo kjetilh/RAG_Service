@@ -7,6 +7,7 @@ from typing import Literal
 from sqlalchemy import text
 
 from app.rag.cases.loader import case_by_id, load_rag_cases
+from app.rag.cases.visibility import visible_cases
 from app.rag.index.db import engine
 from app.settings import settings
 
@@ -189,7 +190,7 @@ def _db_roles_for_user(user_id: str, case_ids: list[str]) -> dict[str, CaseRole]
 
 def case_list_for_user(user_id: str | None) -> list[dict]:
     cfg = load_rag_cases(settings.rag_cases_path)
-    enabled = [c for c in cfg.cases if c.enabled]
+    enabled = visible_cases(cfg)
     case_ids = [c.case_id for c in enabled]
 
     if user_id and user_id.strip() in global_owner_user_ids():

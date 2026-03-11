@@ -8,6 +8,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.rag.audit.coverage_report import build_coverage_actions, build_coverage_report
 from app.rag.cases.loader import case_by_id, load_rag_cases
+from app.rag.cases.visibility import visible_case_ids, visible_cases
 from app.rag.generate.prompt_config_store import (
     PromptRuntimeConfig,
     get_runtime_config,
@@ -220,6 +221,8 @@ def _build_prompt_config_response(runtime_cfg: PromptRuntimeConfig) -> PromptCon
 
 def _case_prompt_summary(case_id: str, runtime_cfg: PromptRuntimeConfig) -> CasePromptProfileSummary:
     cfg = load_rag_cases(settings.rag_cases_path)
+    if case_id not in visible_case_ids(cfg):
+        raise HTTPException(status_code=404, detail=f"Unknown case: {case_id}")
     selected = case_by_id(cfg, case_id)
     system_path, answer_path, system_source, answer_source = resolve_effective_paths(runtime_cfg, case_id=case_id)
     _prompt_file_info(system_path, "system_persona_path")
@@ -316,7 +319,7 @@ def admin_case_prompt_profiles():
     try:
         runtime_cfg = get_runtime_config()
         cfg = load_rag_cases(settings.rag_cases_path)
-        items = [_case_prompt_summary(case.case_id, runtime_cfg) for case in cfg.cases]
+        items = [_case_prompt_summary(case.case_id, runtime_cfg) for case in visible_cases(cfg)]
         return CasePromptProfilesResponse(cases=items)
     except HTTPException:
         raise
@@ -334,6 +337,8 @@ def admin_case_prompt_profiles():
 def admin_apply_case_prompt_profile(req: ApplyCasePromptProfileRequest):
     try:
         cfg = load_rag_cases(settings.rag_cases_path)
+        if req.case_id not in visible_case_ids(cfg):
+            raise HTTPException(status_code=404, detail=f"Unknown case: {req.case_id}")
         selected = case_by_id(cfg, req.case_id)
         system_override = _normalize_optional_text(selected.prompt_profile.system_persona_path)
         answer_override = _normalize_optional_text(selected.prompt_profile.answer_template_path)

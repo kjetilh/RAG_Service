@@ -137,6 +137,63 @@ def test_admin_case_prompt_profiles_returns_case_summary(monkeypatch):
     assert resp.cases[0].system_persona_source == "case"
 
 
+def test_admin_case_prompt_profiles_hide_cases_not_available_on_instance(monkeypatch):
+    original_instance_json = settings.instance_case_ids_json
+    settings.instance_case_ids_json = '["innovasjon_intervjuer"]'
+    try:
+        monkeypatch.setattr(
+            routes_admin,
+            "get_runtime_config",
+            lambda: PromptRuntimeConfig(None, None, 0, None, None, None),
+        )
+        monkeypatch.setattr(
+            routes_admin,
+            "load_rag_cases",
+            lambda _path: RagCasesConfig(
+                version=1,
+                default_case="innovasjon_intervjuer",
+                cases=[
+                    RagCase(
+                        case_id="innovasjon_intervjuer",
+                        description="intervju",
+                        enabled=True,
+                        planner=PlannerConfig(),
+                        prompt_profile=PromptProfileConfig(
+                            system_persona_path="prompts/system_persona_interview.md",
+                            answer_template_path="prompts/answer_template_interview.md",
+                        ),
+                    ),
+                    RagCase(
+                        case_id="dimy_docs",
+                        description="docs",
+                        enabled=True,
+                        planner=PlannerConfig(),
+                        prompt_profile=PromptProfileConfig(
+                            system_persona_path="prompts/system_persona_dimy.md",
+                            answer_template_path="prompts/answer_template_dimy.md",
+                        ),
+                    ),
+                ],
+            ),
+        )
+        monkeypatch.setattr(
+            routes_admin,
+            "resolve_effective_paths",
+            lambda cfg=None, case_id=None: (
+                "prompts/system_persona_interview.md",
+                "prompts/answer_template_interview.md",
+                "case",
+                "case",
+            ),
+        )
+        monkeypatch.setattr(routes_admin, "_prompt_file_info", lambda path, label: (f"/abs/{path}", 111))
+
+        resp = routes_admin.admin_case_prompt_profiles()
+        assert [case.case_id for case in resp.cases] == ["innovasjon_intervjuer"]
+    finally:
+        settings.instance_case_ids_json = original_instance_json
+
+
 def test_admin_apply_case_prompt_profile_uses_case_prompt_paths(monkeypatch):
     captured = {}
     monkeypatch.setattr(
@@ -193,3 +250,39 @@ def test_admin_apply_case_prompt_profile_uses_case_prompt_paths(monkeypatch):
     assert captured["system_persona_path"] == "prompts/system_persona_interview.md"
     assert captured["answer_template_path"] == "prompts/answer_template_interview.md"
     assert resp.effective_system_persona_path == "prompts/system_persona_interview.md"
+
+
+def test_admin_apply_case_prompt_profile_hides_case_not_available_on_instance(monkeypatch):
+    original_instance_json = settings.instance_case_ids_json
+    settings.instance_case_ids_json = '["innovasjon_intervjuer"]'
+    try:
+        monkeypatch.setattr(
+            routes_admin,
+            "load_rag_cases",
+            lambda _path: RagCasesConfig(
+                version=1,
+                default_case="innovasjon_intervjuer",
+                cases=[
+                    RagCase(
+                        case_id="innovasjon_intervjuer",
+                        description="intervju",
+                        enabled=True,
+                        planner=PlannerConfig(),
+                        prompt_profile=PromptProfileConfig(),
+                    ),
+                    RagCase(
+                        case_id="dimy_docs",
+                        description="docs",
+                        enabled=True,
+                        planner=PlannerConfig(),
+                        prompt_profile=PromptProfileConfig(),
+                    ),
+                ],
+            ),
+        )
+
+        with pytest.raises(HTTPException) as exc:
+            routes_admin.admin_apply_case_prompt_profile(ApplyCasePromptProfileRequest(case_id="dimy_docs"))
+        assert exc.value.status_code == 404
+    finally:
+        settings.instance_case_ids_json = original_instance_json

@@ -67,6 +67,7 @@ def test_case_exists_reads_rag_cases_file(tmp_path: Path):
 def test_case_list_for_user_resolves_owner_and_db_roles(tmp_path: Path, monkeypatch):
     original_path = settings.rag_cases_path
     original_owner_json = settings.cell_owner_user_ids_json
+    original_instance_json = settings.instance_case_ids_json
     cases_path = tmp_path / "rag_cases.yml"
     _write_cases(cases_path)
     settings.rag_cases_path = str(cases_path)
@@ -87,3 +88,31 @@ def test_case_list_for_user_resolves_owner_and_db_roles(tmp_path: Path, monkeypa
     finally:
         settings.rag_cases_path = original_path
         settings.cell_owner_user_ids_json = original_owner_json
+        settings.instance_case_ids_json = original_instance_json
+
+
+def test_case_list_for_user_respects_instance_visibility(tmp_path: Path, monkeypatch):
+    original_path = settings.rag_cases_path
+    original_owner_json = settings.cell_owner_user_ids_json
+    original_instance_json = settings.instance_case_ids_json
+    cases_path = tmp_path / "rag_cases.yml"
+    _write_cases(cases_path)
+    settings.rag_cases_path = str(cases_path)
+    settings.cell_owner_user_ids_json = '["owner-user"]'
+    settings.instance_case_ids_json = '["dimy_docs"]'
+    try:
+        owner_rows = control.case_list_for_user("owner-user")
+        assert [row["case_id"] for row in owner_rows] == ["dimy_docs"]
+
+        monkeypatch.setattr(
+            control,
+            "_db_roles_for_user",
+            lambda user_id, case_ids: {"dimy_docs": "viewer"} if user_id == "viewer-user" else {},
+        )
+        viewer_rows = control.case_list_for_user("viewer-user")
+        assert [row["case_id"] for row in viewer_rows] == ["dimy_docs"]
+        assert viewer_rows[0]["role"] == "viewer"
+    finally:
+        settings.rag_cases_path = original_path
+        settings.cell_owner_user_ids_json = original_owner_json
+        settings.instance_case_ids_json = original_instance_json
