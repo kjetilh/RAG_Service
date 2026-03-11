@@ -10,7 +10,7 @@ Denne mappen inneholder driftsnotater og arbeidsdokumenter.
 
 - `DEPLOY_VPS.md`: konkret VPS-oppsett for testing med flere brukere.
 - `DEPLOY_VPS_MULTI_RAG.md`: VPS-oppsett for flere domene-RAG-er + scaffold-tilgang.
-- `VPS_DEPLOY_RUNBOOK.md`: kanonisk deploy-sti for `innorag` og `doc` via repo-script.
+- `VPS_DEPLOY_RUNBOOK.md`: kanonisk deploy-sti for `innorag` og `doc` via repo-script, inkludert filmonstre for nar post-sync faktisk skal redeploye `RAG_Service`.
 - `VPS_BRUKERE_OG_TILGANG.md`: anbefalt bruker-/gruppeoppsett og tilgangsmodell på VPS.
 - `VPS_DOCKER_SETUP.md`: Docker Engine + Compose-oppsett på Hetzner VPS.
 - `VPS_NGINX_IP_DEPLOY.md`: Nginx-oppsett med IP-basert HTTPS (self-signed) og deploystatus.
