@@ -49,7 +49,9 @@ Dette er den tryggeste ma ten a redeploye etter repo-sync nar deploy-checkouten 
 
 `/srv/ops/rag_service/scripts/run_doc_sync.sh` skal ikke bruke manuelle `docker compose --build`-kommandoer.
 
-Hvis repo-speilet for `RAG_Service` flytter seg under sync, skal post-sync-flyten redeploye med:
+Post-sync-flyten skal kunne redeploye via deploy-script, men dette bor vaere eksplisitt styrt med env-flagget `AUTO_REDEPLOY_RAG_SERVICE=1`.
+
+Nar flagget er aktivert og repo-speilet for `RAG_Service` flytter seg under sync, skal post-sync-flyten redeploye med:
 
 ```bash
 SOURCE_ROOT=/srv/ops/repos/RAG_Service OPS_ROOT=/srv/ops/rag_service ./scripts/deploy_innorag.sh
@@ -57,6 +59,12 @@ SOURCE_ROOT=/srv/ops/repos/RAG_Service OPS_ROOT=/srv/ops/rag_service ./scripts/d
 ```
 
 Deretter skal verifiseringene kjores.
+
+Standard anbefaling:
+
+- `AUTO_REDEPLOY_RAG_SERVICE=0` i timer/scheduler
+- bruk deploy-script direkte for manuelle kode-deploy
+- sla pa auto-redeploy bare hvis mirror-basert build er verifisert stabilt i det aktuelle miljoet
 
 ## Health og rask kontroll
 
