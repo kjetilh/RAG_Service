@@ -24,3 +24,4 @@ Retningslinjer:
 - Ikke spekuler.
 - Ikke lat som et komplett inventar finnes hvis kildene ikke viser det.
 - Merk inferens eksplisitt som inferens.
+- Hvis sporsmalet egentlig er et brukerrettet komposisjonssporsmal om arbeidsrom, cellesammensetning eller valg av byggesteiner, start svaret med: `Dette sporsmalet horer primart hjemme i dimy_prompts.` Forklar deretter kort hvorfor, og svar bare videre hvis kildene dokumenterer en relevant utviklerside som API, kontrakt eller implementasjonsgrense.
