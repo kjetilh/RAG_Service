@@ -3,7 +3,11 @@ from types import SimpleNamespace
 
 from app.models.schemas import ChatResponse, Citation
 from app.rag.cases.loader import EvaluationConfig
-from app.rag.planner.answer_modes import AnswerModePlan, GENERAL_DIRECT_CONTRACT
+from app.rag.planner.answer_modes import (
+    AnswerModePlan,
+    GENERAL_DIRECT_CONTRACT,
+    WORKSPACE_RECIPE_CONTRACT,
+)
 from app.rag.planner.deterministic import PlanResult
 from app.rag import pipeline
 
@@ -178,6 +182,54 @@ def test_answer_question_passes_dynamic_contract_for_general_mode(monkeypatch):
     assert captured["query"].endswith("innovasjonspolitikk virkemidler")
     assert captured["render"]["answer_contract"] == GENERAL_DIRECT_CONTRACT
     assert captured["render"]["extra_query_plan"]["retrieval_query_input"].endswith("innovasjonspolitikk virkemidler")
+
+
+def test_answer_question_passes_workspace_recipe_contract(monkeypatch):
+    mode = AnswerModePlan(
+        answer_mode="workspace_recipe",
+        source_strategy="articles",
+        response_shape="workspace_recipe",
+        streaming_allowed=False,
+        rewrite_query=False,
+        use_subquery_planner=False,
+        default_prompt_case_id="dimy_prompts",
+        answer_contract=WORKSPACE_RECIPE_CONTRACT,
+        planner_focus="Prioriter dokumenterte arbeidsromsoppskrifter.",
+        retrieval_hint="arbeidsrom workspace oppskrift RAGCaseCatalogCell RAGQueryCell",
+    )
+
+    def _plan_dimy() -> PlanResult:
+        return PlanResult(
+            filters={"source_type": ["prompt_docs"]},
+            retrieval={"top_k_vector": 5, "top_k_lexical": 5, "top_k_final": 5, "max_chunks_per_doc": 3},
+            trace={"planner_mode": "deterministic", **mode.as_trace()},
+            prompt_instruction=None,
+            case_id="dimy_prompts",
+            evaluation=EvaluationConfig(min_citations=1, min_unique_docs=1, min_avg_score=0.0, enforce=False),
+            answer_mode=mode,
+        )
+
+    monkeypatch.setattr(pipeline, "plan_query", lambda *_args, **_kwargs: _plan_dimy())
+
+    captured = {}
+
+    def _fake_retrieve_candidates(**kwargs):
+        captured.update(kwargs)
+        return ([], kwargs["query"])
+
+    def _fake_render_response(**kwargs):
+        captured["render"] = kwargs
+        return ChatResponse(answer="ok", citations=[], retrieval_debug={"query_plan": {"answer_mode": "workspace_recipe"}})
+
+    monkeypatch.setattr(pipeline, "_retrieve_candidates", _fake_retrieve_candidates)
+    monkeypatch.setattr(pipeline, "_render_response", _fake_render_response)
+
+    pipeline.answer_question("Hvordan setter jeg sammen et arbeidsrom med katalog og RAG?")
+
+    assert captured["query"].endswith("RAGCaseCatalogCell RAGQueryCell")
+    assert captured["render"]["answer_contract"] == WORKSPACE_RECIPE_CONTRACT
+    assert "arbeidsromsoppskrifter" in captured["render"]["router_instruction"]
+    assert captured["render"]["extra_query_plan"]["retrieval_query_input"].endswith("RAGCaseCatalogCell RAGQueryCell")
 
 
 def test_answer_question_formats_interview_gap_mode_without_technical_drift(monkeypatch):

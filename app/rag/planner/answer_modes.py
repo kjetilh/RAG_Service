@@ -150,6 +150,26 @@ CHAPTER_STRUCTURE_PATTERNS = [
     "struktur for boken",
 ]
 
+WORKSPACE_RECIPE_PATTERNS = [
+    "arbeidsrom",
+    "workspace",
+    "sette sammen",
+    "sammensette",
+    "sammensetning",
+    "komponent",
+    "komponenter",
+    "byggestein",
+    "byggesteiner",
+    "oppskrift",
+    "oppskrifter",
+    "router",
+    "katalog",
+    "prompt-admin",
+    "prompt admin",
+    "hvilke celler",
+    "hvilken celle",
+]
+
 
 GENERAL_DIRECT_CONTRACT = """Svar direkte på spørsmålet med bare de delene som faktisk hjelper.
 Bruk korte mellomtitler bare når de gjør svaret tydeligere.
@@ -210,6 +230,28 @@ Hvis brukeren ber om kort svar, svar kort.
 Hvis brukeren ber om drøfting eller analyse, utvid de relevante delene."""
 
 
+WORKSPACE_RECIPE_CONTRACT = """## Kort anbefaling
+Si hvilket dokumentert arbeidsromsmønster eller hvilken dokumentert oppskrift som passer best.
+
+## Dokumentert arbeidsromsoppskrift
+Navngi det dokumenterte mønsteret eller oppsettet som dekker behovet best.
+
+## Foreslåtte celler
+List bare dokumenterte celler eller komponenter, og si kort hva kildene sier at de brukes til.
+
+## Hvordan settes dette sammen
+Beskriv et konkret oppsett i praktiske steg. Start med det enkleste dokumenterte oppsettet som dekker behovet.
+
+## Når dette passer
+Si kort hvilken type arbeidsflyt eller brukerbehov oppsettet passer for.
+
+## Begrensninger og manglende dokumentasjon
+Si tydelig hva kildene ikke dekker, eller hva som bare er svakere dokumentert.
+
+Ikke foreslå udokumenterte celler, skjermflyter eller capabilities.
+Hvis ingen dokumentert oppskrift passer godt nok, si det eksplisitt."""
+
+
 INNOVATION_POLICY_GENERAL_FOCUS = (
     "Hold svaret innen innovasjonspolitikk, virkemidler, omstilling og praktisk politikkutforming "
     "for bokprosjektet. Hvis kildene i konteksten hovedsakelig peker mot andre innovasjonsdomener, "
@@ -219,6 +261,13 @@ INNOVATION_POLICY_GENERAL_FOCUS = (
 
 INNOVATION_POLICY_RETRIEVAL_HINT = (
     "innovasjonspolitikk virkemidler virkemiddelapparat omstilling Norge FoU-politikk næringsutvikling"
+)
+
+
+WORKSPACE_RECIPE_RETRIEVAL_HINT = (
+    "arbeidsrom workspace oppskrift RAGCaseCatalogCell RAGQueryCell "
+    "RAGCorpusExplorerCell RAGDocumentLinksCell RAGCaseMembersAdminCell "
+    "router katalog prompt-admin prompt admin"
 )
 
 
@@ -258,6 +307,26 @@ def choose_answer_mode(
     literature_hits = _word_hits(message_lc, LITERATURE_PATTERNS)
     writing_hits = _word_hits(message_lc, WRITING_PATTERNS)
     policy_hits = _word_hits(message_lc, POLICY_PATTERNS)
+
+    if case_id == "dimy_prompts" and (
+        _contains_any(message_lc, WORKSPACE_RECIPE_PATTERNS) or selected_domain == "docs"
+    ):
+        return AnswerModePlan(
+            answer_mode="workspace_recipe",
+            source_strategy="articles",
+            response_shape="workspace_recipe",
+            streaming_allowed=False,
+            rewrite_query=False,
+            use_subquery_planner=False,
+            default_prompt_case_id="dimy_prompts",
+            answer_contract=WORKSPACE_RECIPE_CONTRACT,
+            planner_focus=(
+                "Prioriter dokumenterte arbeidsromsoppskrifter, navngitte celler, konkrete steg, "
+                "når oppsettet passer og tydelige begrensninger."
+            ),
+            detail_level=detail_level,
+            retrieval_hint=WORKSPACE_RECIPE_RETRIEVAL_HINT,
+        )
 
     if _contains_any(message_lc, QUESTION_FINDINGS_PATTERNS):
         return AnswerModePlan(

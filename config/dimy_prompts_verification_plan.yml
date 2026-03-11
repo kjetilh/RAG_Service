@@ -1,0 +1,58 @@
+version: 1
+plan_id: dimy_prompts_verification_v1
+checks:
+  - check_id: DP1
+    case_id: dimy_prompts
+    question: "Hvordan setter jeg sammen et arbeidsrom med katalog, RAG og prompt-admin?"
+    expected:
+      answer_mode: workspace_recipe
+      source_strategy: articles
+      min_citations: 4
+      required_all:
+        - "Dokumentert arbeidsromsoppskrift"
+        - "Foreslåtte celler"
+        - "Hvordan settes dette sammen"
+      required_source_types:
+        - "prompt_docs"
+  - check_id: DP2
+    case_id: dimy_prompts
+    question: "Hvilke dokumenterte celler bør inngå i et brukerrettet arbeidsrom for dokumentasjon?"
+    expected:
+      answer_mode: workspace_recipe
+      source_strategy: articles
+      min_citations: 4
+      required_all:
+        - "Dokumentert arbeidsromsoppskrift"
+        - "Foreslåtte celler"
+      required_any:
+        - "RAGQueryCell"
+        - "RAGCaseCatalogCell"
+      required_source_types:
+        - "prompt_docs"
+  - check_id: DP3
+    case_id: dimy_prompts
+    question: "Når bør jeg velge fast case, og når bør jeg bruke router?"
+    expected:
+      answer_mode: workspace_recipe
+      source_strategy: articles
+      min_citations: 3
+      required_all:
+        - "Dokumentert arbeidsromsoppskrift"
+        - "Når dette passer"
+      required_any:
+        - "fast case"
+        - "router"
+      required_source_types:
+        - "prompt_docs"
+  - check_id: DP4
+    case_id: dimy_prompts
+    question: "Hvordan bør en research-klient bytte case mellom dimy_docs og dimy_prompts?"
+    expected:
+      answer_mode: workspace_recipe
+      source_strategy: articles
+      min_citations: 3
+      required_any:
+        - "case_guidance"
+        - "suggested_case_id"
+      required_source_types:
+        - "prompt_docs"

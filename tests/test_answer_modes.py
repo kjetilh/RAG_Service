@@ -1,4 +1,8 @@
-from app.rag.planner.answer_modes import choose_answer_mode, source_types_for_strategy
+from app.rag.planner.answer_modes import (
+    WORKSPACE_RECIPE_CONTRACT,
+    choose_answer_mode,
+    source_types_for_strategy,
+)
 
 
 def test_choose_answer_mode_detects_question_findings():
@@ -76,3 +80,20 @@ def test_source_types_for_strategy_splits_interviews_and_articles():
     assert source_types_for_strategy("articles", source_types) == ["innovasjonsledelse", "innovasjonsfag"]
     assert source_types_for_strategy("interviews", source_types) == ["innovasjon_intervju_transcript"]
     assert source_types_for_strategy("hybrid", source_types) == source_types
+
+
+def test_choose_answer_mode_uses_workspace_recipe_for_dimy_prompts_case():
+    plan = choose_answer_mode(
+        message="Hvordan setter jeg sammen et arbeidsrom med katalog, RAG og prompt-admin?",
+        case_id="dimy_prompts",
+        docs_source_types=["prompt_docs"],
+        selected_domain="docs",
+    )
+
+    assert plan.answer_mode == "workspace_recipe"
+    assert plan.source_strategy == "articles"
+    assert plan.streaming_allowed is False
+    assert plan.rewrite_query is False
+    assert plan.default_prompt_case_id == "dimy_prompts"
+    assert plan.answer_contract == WORKSPACE_RECIPE_CONTRACT
+    assert "RAGQueryCell" in (plan.retrieval_hint or "")
