@@ -156,7 +156,16 @@ def test_require_document_access_checks_allowed_case_intersection(monkeypatch):
 
     with pytest.raises(HTTPException) as exc:
         routes_research._require_document_access("d1", _identity("research:download", case_ids=["doc_case"]))
-    assert exc.value.status_code == 403
+    assert exc.value.status_code == 404
+
+
+def test_require_case_access_hides_case_not_available_on_instance(monkeypatch):
+    monkeypatch.setattr(routes_research, "case_exists", lambda _case_id: True)
+    monkeypatch.setattr(routes_research, "_allowed_case_ids", lambda _identity: {"dimy_docs"})
+
+    with pytest.raises(HTTPException) as exc:
+        routes_research._require_case_access("innovasjon", _identity("research:read", case_ids=["innovasjon"]))
+    assert exc.value.status_code == 404
 
 
 def test_research_download_document_returns_file_response(tmp_path: Path, monkeypatch):
@@ -231,4 +240,4 @@ def test_research_download_document_rejects_case_mismatch_for_signed_grant(monke
                 sig=routes_research._download_signature("d1", 1_700_000_120, "doc_case"),
             ),
         )
-    assert exc.value.status_code == 403
+    assert exc.value.status_code == 404

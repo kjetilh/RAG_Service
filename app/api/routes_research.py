@@ -177,8 +177,8 @@ def _require_case_access(case_id: str, identity: ResearchIdentity) -> None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Unknown case: {case_id}")
     if case_id not in _allowed_case_ids(identity):
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Research token is not allowed to access case '{case_id}'.",
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Unknown case: {case_id}",
         )
 
 
@@ -305,8 +305,8 @@ def _require_document_access(doc_id: str, identity: ResearchIdentity) -> None:
         )
     if not doc_cases.intersection(_allowed_case_ids(identity)):
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Research token is not allowed to access this document.",
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found.",
         )
 
 
@@ -339,8 +339,8 @@ def _require_signed_download_access(doc_id: str, grant: SignedDownloadGrant) -> 
         )
     if not doc_cases.intersection(case_ids):
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Research download link is not allowed to access this document.",
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found.",
         )
 
 
