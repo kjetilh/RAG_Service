@@ -151,6 +151,31 @@ def test_research_query_falls_back_to_access_token_when_signing_key_missing(monk
     assert resp.citations[0].download_url == "/v1/research/documents/d1/download?access_token=secret-token"
 
 
+def test_research_query_adds_case_guidance_for_dimy_docs_composition_question(monkeypatch):
+    monkeypatch.setattr(routes_research, "_require_case_access", lambda *_args: None)
+    monkeypatch.setattr(
+        routes_research,
+        "_run_query",
+        lambda _req: QueryResponse(
+            answer="ok",
+            citations=[],
+            retrieval_debug={"query_plan": {"selected_case": "dimy_docs"}},
+            trace=None,
+        ),
+    )
+
+    resp = routes_research.research_query(
+        routes_research.ResearchQueryRequest(
+            case_id="dimy_docs",
+            query="Hvordan kan jeg sette sammen celler som komponenter for et arbeidsrom?",
+        ),
+        identity=_identity("research:read", case_ids=["dimy_docs"]),
+    )
+    assert resp.retrieval_debug is not None
+    query_plan = resp.retrieval_debug["query_plan"]
+    assert query_plan["case_guidance"]["suggested_case_id"] == "dimy_prompts"
+
+
 def test_research_query_omits_download_url_without_download_scope(monkeypatch):
     monkeypatch.setattr(routes_research, "_require_case_access", lambda *_args: None)
     monkeypatch.setattr(

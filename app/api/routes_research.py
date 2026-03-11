@@ -27,7 +27,7 @@ from app.api.routes_cell import (
 from app.api.routes_chat import _document_file_path, _resolve_download_path, _run_query
 from app.models.schemas import Citation, QueryRequest, QueryResponse
 from app.rag.access.control import case_exists
-from app.rag.cases.guidance import case_guidance
+from app.rag.cases.guidance import case_guidance, query_case_guidance
 from app.rag.cases.loader import load_rag_cases
 from app.rag.cases.visibility import visible_case_ids
 from app.rag.generate.llm_provider import ModelProfileError
@@ -379,6 +379,12 @@ def research_query(req: ResearchQueryRequest, identity: ResearchIdentity = Depen
     )
     try:
         response = _run_query(query_req)
+        if response.retrieval_debug and isinstance(response.retrieval_debug, dict):
+            query_plan = response.retrieval_debug.get("query_plan")
+            if isinstance(query_plan, dict):
+                guidance = query_case_guidance(req.case_id, req.query)
+                if guidance:
+                    query_plan["case_guidance"] = guidance
         return _rewrite_query_response_for_research(response, identity)
     except ModelProfileError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
