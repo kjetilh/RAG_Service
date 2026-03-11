@@ -31,7 +31,7 @@ Sett `RESEARCH_API_TOKENS_JSON` i miljoet:
   "replace-with-long-random-token": {
     "label": "chatgpt-deep-research",
     "scopes": ["research:read", "research:download"],
-    "case_ids": ["doc_case", "dimy_docs", "dimy_prompts"]
+    "case_ids": ["dimy_docs"]
   }
 }
 ```
@@ -148,18 +148,61 @@ Krever enten:
 
 ## Case-strategi
 
-For dokumentasjon og prompts bor research-klienter holde disse som separate cases:
+Anbefalt target-arkitektur er a holde dokumentasjon og prompts som separate cases.
 
-1. dokumentasjon
+Status i dette repoet akkurat na:
+
+- `config/rag_cases.yml` definerer `dimy_docs` og `dimy_prompts` pa `doc`-siden
+- `dimy_docs` er utvikler- og kodeassistentcaset for `CellProtocol`, implementerte celler, API-er og teknisk dokumentasjon
+- `dimy_prompts` er brukerrettet caset for cellesammensetning, arbeidsrom, byggesteiner og dokumenterte oppskrifter
+
+Det betyr at research-klienter pa `doc.haven.digipomps.org` bor velge case eksplisitt ut fra sporsmalstype:
+
+1. `dimy_docs`
    - kodebruk
    - arkitektur
    - driftsdokumentasjon
-2. prompts
-   - systeminstruksjoner
-   - promptmaler
-   - beslutninger om svarstil og guardrails
+   - API-er, kontrakter og runtime-adferd
+2. `dimy_prompts`
+   - arbeidsrom
+   - cellesammensetning
+   - byggesteiner og routervalg
+   - dokumenterte oppskrifter for brukere
 
 Start med `GET /v1/research/cases`, velg smaleste relevante case, og kryss bare over til links/corpus i andre cases hvis sporsmalet faktisk krever det.
+
+### Praktisk valg pa `doc.haven.digipomps.org`
+
+Velg `dimy_docs` nar sporsmalet handler om:
+
+- `CellProtocol`
+- implementerte celler
+- API-endepunkter
+- auth
+- kontrakter
+- runtime-adferd
+- tekniske begrensninger
+
+Velg `dimy_prompts` nar sporsmalet handler om:
+
+- hvordan sette sammen celler
+- hvordan bygge et arbeidsrom
+- hvilke byggesteiner som passer sammen
+- routervalg og komposisjonsoppskrifter
+
+Hvis en research-klient starter i feil case, bor den si det eksplisitt og bytte case i stedet for a svare bredt fra feil corpus.
+
+### Eksempler
+
+Bruk `dimy_docs` for:
+
+- `Hvilke API-endepunkter finnes i RAG-servicen, og hvilke er admin vs chat vs research?`
+- `Hvordan virker CellProtocol-kontrakter og case-basert promptvalg?`
+
+Bruk `dimy_prompts` for:
+
+- `Hvordan setter jeg sammen et arbeidsrom med katalog, RAG og prompt-admin?`
+- `Hvilke celler bor inngaa i et brukerrettet scaffold for dokumentasjonsarbeid?`
 
 ## Anbefalt oppsett
 
