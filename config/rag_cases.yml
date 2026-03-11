@@ -5,7 +5,7 @@ cases:
     description: Utvikler- og kodeassistent-RAG for CellProtocol, implementerte celler og dokumentert kodebruk.
     enabled: true
     planner:
-      docs_source_types: ["haven_docs", "cellprotocol_docs", "prompt_docs"]
+      docs_source_types: ["haven_docs", "cellprotocol_docs"]
       prompts_source_types: []
       docs_keywords: ["api", "endpoint", "kode", "code", "arkitektur", "architecture", "sync", "ingest", "deploy", "database", "cellprotocol", "cell", "skeleton", "configuration", "flow"]
       prompt_keywords: []

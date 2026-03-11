@@ -158,3 +158,13 @@ cases:
     cfg = load_rag_cases(p)
     assert cfg.cases[0].prompt_profile.system_persona_path == "prompts/system_persona_interview.md"
     assert cfg.cases[0].prompt_profile.answer_template_path == "prompts/answer_template_interview.md"
+
+
+def test_repository_case_split_keeps_dimy_docs_and_dimy_prompts_separate():
+    cfg = load_rag_cases(Path("config/rag_cases.yml"))
+    docs_case = case_by_id(cfg, "dimy_docs")
+    prompts_case = case_by_id(cfg, "dimy_prompts")
+
+    assert "prompt_docs" not in docs_case.planner.docs_source_types
+    assert prompts_case.planner.docs_source_types == ["prompt_docs"]
+    assert prompts_case.planner.prompts_source_types == []
