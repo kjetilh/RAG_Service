@@ -3,7 +3,10 @@ from app.rag.index.db import engine
 
 def lexical_search(query: str, top_k: int = 50, filters: dict | None = None):
     filters = filters or {}
-    where = ["c.content_tsv @@ plainto_tsquery('simple', :q)"]
+    where = [
+        "c.content_tsv @@ plainto_tsquery('simple', :q)",
+        "COALESCE(d.doc_state, 'active') = 'active'",
+    ]
     params = {"q": query, "top_k": top_k}
 
     if "year_gte" in filters:

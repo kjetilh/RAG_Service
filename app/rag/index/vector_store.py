@@ -16,7 +16,7 @@ def upsert_embedding(chunk_id: str, embedding: np.ndarray) -> None:
 
 def vector_search(query_embedding: np.ndarray, top_k: int = 50, filters: dict | None = None):
     filters = filters or {}
-    where = []
+    where = ["COALESCE(d.doc_state, 'active') = 'active'"]
     params = {"q": _to_pgvector(query_embedding), "top_k": top_k}
     if "year_gte" in filters:
         where.append("d.year >= :year_gte")
