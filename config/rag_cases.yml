@@ -2,19 +2,44 @@ version: 1
 default_case: dimy_docs
 cases:
   - case_id: dimy_docs
-    description: Dokumentasjon og kodebruk for HAVEN/CellProtocol/CellScaffold.
+    description: Utvikler- og kodeassistent-RAG for CellProtocol, implementerte celler og dokumentert kodebruk.
     enabled: true
     planner:
-      docs_source_types: ["haven_docs", "cellprotocol_docs"]
-      prompts_source_types: ["dimy_prompts", "prompt_docs"]
-      docs_keywords: ["api", "endpoint", "kode", "code", "arkitektur", "architecture", "sync", "ingest", "deploy", "database"]
-      prompt_keywords: ["prompt", "prompts", "promptmal", "system prompt", "systeminstruksjon", "instruction", "template", "mal", "agent", "policy"]
+      docs_source_types: ["haven_docs", "cellprotocol_docs", "prompt_docs"]
+      prompts_source_types: []
+      docs_keywords: ["api", "endpoint", "kode", "code", "arkitektur", "architecture", "sync", "ingest", "deploy", "database", "cellprotocol", "cell", "skeleton", "configuration", "flow"]
+      prompt_keywords: []
       default_domain: docs
     retrieval:
       top_k_vector: 50
       top_k_lexical: 50
       top_k_final: 12
       max_chunks_per_doc: 3
+    prompt_profile:
+      system_persona_path: "prompts/system_persona_dimy_developer.md"
+      answer_template_path: "prompts/answer_template_dimy_developer.md"
+    evaluation:
+      min_citations: 2
+      min_unique_docs: 1
+      min_avg_score: 0.0
+      enforce: false
+  - case_id: dimy_prompts
+    description: Brukerrettet verktøy for å sette sammen celler som komponenter og velge riktige byggesteiner.
+    enabled: true
+    planner:
+      docs_source_types: ["prompt_docs"]
+      prompts_source_types: ["dimy_prompts"]
+      docs_keywords: ["celle", "celler", "komponent", "komponenter", "sammensette", "sammensetning", "workspace", "skjelett", "skeleton", "konfigurasjon", "formål", "interesser"]
+      prompt_keywords: ["prompt", "prompts", "system prompt", "template", "mal", "cell", "cells", "component", "components", "setup", "configuration"]
+      default_domain: prompts
+    retrieval:
+      top_k_vector: 50
+      top_k_lexical: 50
+      top_k_final: 12
+      max_chunks_per_doc: 3
+    prompt_profile:
+      system_persona_path: "prompts/system_persona_dimy_components.md"
+      answer_template_path: "prompts/answer_template_dimy_components.md"
     evaluation:
       min_citations: 2
       min_unique_docs: 1
