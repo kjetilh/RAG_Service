@@ -27,6 +27,12 @@
     .hint strong { display:block; margin-bottom:4px; }
     .hint button { margin-top:8px; padding:6px 10px; font-size:13px; }
     .hidden { display:none; }
+    .quick-actions { margin-top: 14px; }
+    .actions-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+    .action-card { border:1px solid #e5e5e5; border-radius:10px; padding:10px; background:#fafafa; }
+    .action-card strong { display:block; margin-bottom:4px; font-size:14px; }
+    .action-card .muted { display:block; margin-bottom:8px; }
+    .action-card button { padding:6px 10px; font-size:13px; }
   </style>
 </head>
 <body>
@@ -53,6 +59,13 @@
       </div>
     </div>
     <div id="queryHint" class="hint hidden"></div>
+    <div id="quickActions" class="panel quick-actions hidden">
+      <div class="row" style="justify-content:space-between; align-items:center;">
+        <strong>Hurtigvalg</strong>
+        <span class="muted mono">setter inn dokumenterte startspørsmål</span>
+      </div>
+      <div id="quickActionsGrid" class="actions-grid" style="margin-top:10px;"></div>
+    </div>
 
     <div class="split">
       <div class="panel">
@@ -96,6 +109,8 @@
   const modeEl = $("mode");
   const caseMetaEl = $("caseMeta");
   const queryHintEl = $("queryHint");
+  const quickActionsEl = $("quickActions");
+  const quickActionsGridEl = $("quickActionsGrid");
 
   let aborter = null;
   let caseMap = new Map();
@@ -165,6 +180,7 @@
       caseIdEl.appendChild(opt);
     });
     renderCaseMeta();
+    renderQuickActions();
     renderQueryHint();
   }
 
@@ -215,6 +231,35 @@
     caseMetaEl.classList.remove("hidden");
   }
 
+  function renderQuickActions() {
+    const selected = caseMap.get(caseIdEl.value || "");
+    const actions = Array.isArray(selected?.quick_actions) ? selected.quick_actions : [];
+    if (!actions.length) {
+      quickActionsEl.classList.add("hidden");
+      quickActionsGridEl.innerHTML = "";
+      return;
+    }
+
+    quickActionsGridEl.innerHTML = "";
+    actions.forEach((action) => {
+      const card = document.createElement("div");
+      card.className = "action-card";
+      card.innerHTML = `
+        <strong>${escapeHtml(action.label || "Hurtigvalg")}</strong>
+        <span class="muted">${escapeHtml(action.description || "")}</span>
+        <button type="button">Bruk</button>
+      `;
+      const btn = card.querySelector("button");
+      btn.onclick = () => {
+        q.value = String(action.prompt || "");
+        q.focus();
+        renderQueryHint();
+      };
+      quickActionsGridEl.appendChild(card);
+    });
+    quickActionsEl.classList.remove("hidden");
+  }
+
   function renderQueryHint(fromServer) {
     const selected = caseMap.get(caseIdEl.value || "");
     const needsCompositionHint = caseIdEl.value === "dimy_docs" && looksLikeCompositionQuestion(q.value);
@@ -236,6 +281,7 @@
       btn.onclick = () => {
         caseIdEl.value = suggestedCaseId;
         renderCaseMeta();
+        renderQuickActions();
         renderQueryHint();
       };
     }
@@ -425,6 +471,7 @@
 
   caseIdEl.addEventListener("change", () => {
     renderCaseMeta();
+    renderQuickActions();
     renderQueryHint();
   });
 

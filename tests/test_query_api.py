@@ -106,7 +106,12 @@ def test_list_cases_only_returns_enabled_cases(monkeypatch):
 
     resp = routes_chat.list_cases()
 
-    assert resp == {"cases": [{"case_id": "innovasjon", "description": "A", "enabled": True}]}
+    assert len(resp["cases"]) == 1
+    item = resp["cases"][0]
+    assert item["case_id"] == "innovasjon"
+    assert item["description"] == "A"
+    assert item["enabled"] is True
+    assert item["quick_actions"]
 
 
 def test_run_query_adds_case_guidance_for_dimy_docs_composition_question(monkeypatch):

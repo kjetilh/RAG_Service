@@ -10,7 +10,7 @@ from typing import Any, Literal
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import text
 
 from app.api.routes_chat import _run_query
@@ -50,6 +50,12 @@ class CellIdentity:
     via_admin_api_key: bool = False
 
 
+class CaseQuickAction(BaseModel):
+    label: str
+    description: str
+    prompt: str
+
+
 class CaseSummary(BaseModel):
     case_id: str
     description: str
@@ -59,6 +65,7 @@ class CaseSummary(BaseModel):
     use_when: str | None = None
     avoid_when: str | None = None
     preferred_alternative_case_id: str | None = None
+    quick_actions: list[CaseQuickAction] = Field(default_factory=list)
 
 
 class CasesResponse(BaseModel):

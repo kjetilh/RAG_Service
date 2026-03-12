@@ -1,4 +1,4 @@
-from app.rag.cases.guidance import case_guidance, looks_like_composition_question, query_case_guidance
+from app.rag.cases.guidance import case_guidance, case_quick_actions, looks_like_composition_question, query_case_guidance
 
 
 def test_case_guidance_for_doc_cases_is_explicit():
@@ -20,3 +20,10 @@ def test_query_case_guidance_redirects_dimy_docs_composition_questions():
     assert hint["suggested_case_id"] == "dimy_prompts"
 
     assert query_case_guidance("dimy_prompts", "Hvordan setter jeg sammen celler?") is None
+
+
+def test_case_quick_actions_cover_public_cases():
+    assert case_quick_actions("innovasjon_bokskriving")
+    assert case_quick_actions("dimy_docs")
+    assert case_quick_actions("dimy_prompts")
+    assert case_guidance("dimy_docs")["quick_actions"][0]["label"]
