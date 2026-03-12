@@ -1,9 +1,10 @@
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import text
 
+from app.api.case_browse import CorpusResponse, LinkGraphResponse, _build_link_graph, _corpus_rows
 from app.models.schemas import ChatRequest, ChatResponse, QueryRequest, QueryResponse
 from app.rag.cases.guidance import case_guidance, query_case_guidance
 from app.rag.cases.loader import case_by_id, load_rag_cases
@@ -128,6 +129,34 @@ def list_cases():
             for case in visible_cases(cfg, available_source_types=available_source_types)
         ]
     }
+
+
+@router.get("/v1/cases/{case_id}/corpus", response_model=CorpusResponse)
+def public_case_corpus(
+    case_id: str,
+    q: str | None = Query(default=None, min_length=1, max_length=200),
+    include_tombstones: bool = False,
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+):
+    _validate_case_visibility(case_id, None)
+    total, rows = _corpus_rows(case_id, q, include_tombstones, limit, offset)
+    return CorpusResponse(case_id=case_id, total=total, limit=limit, offset=offset, items=rows)
+
+
+@router.get("/v1/cases/{case_id}/links", response_model=LinkGraphResponse)
+def public_case_links(
+    case_id: str,
+    limit_docs: int = Query(default=300, ge=1, le=2000),
+):
+    _validate_case_visibility(case_id, None)
+    return _build_link_graph(case_id, only_doc_id=None, limit_docs=limit_docs)
+
+
+@router.get("/v1/cases/{case_id}/documents/{doc_id}/links", response_model=LinkGraphResponse)
+def public_document_links(case_id: str, doc_id: str):
+    _validate_case_visibility(case_id, None)
+    return _build_link_graph(case_id, only_doc_id=doc_id, limit_docs=1)
 
 
 @router.post("/v1/query", response_model=QueryResponse)

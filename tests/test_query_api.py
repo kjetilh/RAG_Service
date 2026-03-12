@@ -1,3 +1,6 @@
+import pytest
+from fastapi import HTTPException
+
 from app.api import routes_chat
 from app.models.schemas import (
     ChatRequest,
@@ -128,3 +131,49 @@ def test_run_query_adds_case_guidance_for_dimy_docs_composition_question(monkeyp
 
     hint = resp.retrieval_debug["query_plan"]["case_guidance"]
     assert hint["suggested_case_id"] == "dimy_prompts"
+
+
+def test_public_case_corpus_returns_rows(monkeypatch):
+    monkeypatch.setattr(routes_chat, "_validate_case_visibility", lambda case_id, prompt_case_id: None)
+    monkeypatch.setattr(
+        routes_chat,
+        "_corpus_rows",
+        lambda case_id, q, include_tombstones, limit, offset: (
+            1,
+            [
+                {
+                    "doc_id": "d1",
+                    "title": "Doc 1",
+                    "source_type": "innovasjonsledelse",
+                    "author": None,
+                    "year": None,
+                    "url": None,
+                    "language": "no",
+                    "file_path": "uploads/doc1.md",
+                    "doc_state": "active",
+                    "doc_version": 1,
+                    "updated_at": None,
+                    "chunk_count": 2,
+                }
+            ],
+        ),
+    )
+
+    resp = routes_chat.public_case_corpus("innovasjon", q="doc", include_tombstones=False, limit=25, offset=0)
+
+    assert resp.case_id == "innovasjon"
+    assert resp.total == 1
+    assert resp.items[0].doc_id == "d1"
+    assert resp.items[0].chunk_count == 2
+
+
+def test_public_document_links_preserves_hidden_case_404(monkeypatch):
+    def _raise_hidden(case_id, prompt_case_id):
+        raise HTTPException(status_code=404, detail=f"Case is not available on this instance: {case_id}")
+
+    monkeypatch.setattr(routes_chat, "_validate_case_visibility", _raise_hidden)
+
+    with pytest.raises(HTTPException) as exc:
+        routes_chat.public_document_links("dimy_docs", "d1")
+
+    assert exc.value.status_code == 404

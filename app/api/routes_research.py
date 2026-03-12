@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 
-from app.api.routes_cell import (
+from app.api.case_browse import (
     CaseSummary,
     CasesResponse,
     CorpusResponse,

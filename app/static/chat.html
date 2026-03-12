@@ -33,6 +33,16 @@
     .action-card strong { display:block; margin-bottom:4px; font-size:14px; }
     .action-card .muted { display:block; margin-bottom:8px; }
     .action-card button { padding:6px 10px; font-size:13px; }
+    .browse-grid { display:grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 10px; }
+    @media (max-width: 900px) { .browse-grid { grid-template-columns: 1fr; } }
+    .list-panel { border:1px solid #e5e5e5; border-radius:10px; padding:10px; background:#fff; min-height: 220px; }
+    .doc-list { list-style:none; margin:10px 0 0 0; padding:0; }
+    .doc-item, .edge-item { border-top:1px solid #f0f0f0; padding:10px 0; }
+    .doc-item:first-child, .edge-item:first-child { border-top:none; padding-top:0; }
+    .doc-item.selected { background:#f5f9ff; margin:0 -10px; padding:10px; border-radius:8px; border-top:none; }
+    .doc-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; align-items:center; }
+    .doc-actions a { font-size:13px; }
+    .empty-state { color:#666; font-size:13px; line-height:1.35; }
   </style>
 </head>
 <body>
@@ -92,6 +102,30 @@
       </div>
       <div class="chatlog mono" id="debug"></div>
     </div>
+
+    <div id="browsePanel" class="panel hidden">
+      <div class="row" style="justify-content:space-between; align-items:center;">
+        <strong>Korpus og dokumentlenker</strong>
+        <button id="refreshCorpus" type="button">Oppdater</button>
+      </div>
+      <div class="muted" id="browseMeta" style="margin-top:6px;">Velg et case for å bla i dokumenter og følge lenker.</div>
+      <div class="browse-grid">
+        <div class="list-panel">
+          <div class="row" style="justify-content:space-between; align-items:center;">
+            <strong>Korpus</strong>
+            <span class="muted mono" id="corpusMeta">0 dokumenter</span>
+          </div>
+          <ul id="corpusList" class="doc-list"></ul>
+        </div>
+        <div class="list-panel">
+          <div class="row" style="justify-content:space-between; align-items:center;">
+            <strong>Dokumentlenker</strong>
+            <span class="muted mono" id="linksMeta">velg et dokument</span>
+          </div>
+          <ul id="linksList" class="doc-list"></ul>
+        </div>
+      </div>
+    </div>
   </main>
 
 <script>
@@ -111,9 +145,18 @@
   const queryHintEl = $("queryHint");
   const quickActionsEl = $("quickActions");
   const quickActionsGridEl = $("quickActionsGrid");
+  const browsePanelEl = $("browsePanel");
+  const browseMetaEl = $("browseMeta");
+  const refreshCorpusBtn = $("refreshCorpus");
+  const corpusMetaEl = $("corpusMeta");
+  const corpusListEl = $("corpusList");
+  const linksMetaEl = $("linksMeta");
+  const linksListEl = $("linksList");
 
   let aborter = null;
   let caseMap = new Map();
+  let currentCorpusItems = [];
+  let selectedCorpusDocId = null;
 
   function setStatus(text) {
     statusEl.textContent = text;
@@ -134,6 +177,15 @@
     queryHintEl.innerHTML = "";
   }
 
+  function clearBrowseLists() {
+    currentCorpusItems = [];
+    selectedCorpusDocId = null;
+    corpusListEl.innerHTML = "";
+    linksListEl.innerHTML = "";
+    corpusMetaEl.textContent = "0 dokumenter";
+    linksMetaEl.textContent = "velg et dokument";
+  }
+
   function escapeHtml(s) {
     return String(s)
       .replaceAll("&", "&amp;")
@@ -148,26 +200,24 @@
     citCountEl.textContent = String(citations.length);
     citations.forEach((c, idx) => {
       const li = document.createElement("li");
-      const title = (c.title || "(uten tittel)");
+      const title = c.title || "(uten tittel)";
       const meta = [
         c.author ? c.author : null,
         c.year ? String(c.year) : null,
-        c.source_type ? String(c.source_type) : null
+        c.source_type ? String(c.source_type) : null,
       ].filter(Boolean).join(" · ");
 
-      const score = (typeof c.score === "number") ? c.score.toFixed(3) : "";
+      const score = typeof c.score === "number" ? c.score.toFixed(3) : "";
       const download = c.download_url
         ? ` · <a href="${escapeHtml(c.download_url)}" target="_blank" rel="noopener">last ned</a>`
         : "";
 
-      li.innerHTML = `<div><strong>[${idx+1}]</strong> ${escapeHtml(title)}</div>
+      li.innerHTML = `<div><strong>[${idx + 1}]</strong> ${escapeHtml(title)}</div>
                       <div class="muted mono">${escapeHtml(meta)}${meta && score ? " · " : ""}${score ? "score=" + score : ""}${download}</div>
-                      <div class="mono" style="margin-top:4px;">${escapeHtml(c.excerpt || "").slice(0, 500)}${(c.excerpt && c.excerpt.length>500) ? "…" : ""}</div>`;
+                      <div class="mono" style="margin-top:4px;">${escapeHtml(c.excerpt || "").slice(0, 500)}${c.excerpt && c.excerpt.length > 500 ? "…" : ""}</div>`;
       citationsEl.appendChild(li);
     });
   }
-
-
 
   function renderCaseOptions(cases) {
     const requested = new URLSearchParams(window.location.search).get("case_id") || "";
@@ -182,6 +232,7 @@
     renderCaseMeta();
     renderQuickActions();
     renderQueryHint();
+    loadCorpus();
   }
 
   function looksLikeCompositionQuestion(message) {
@@ -196,7 +247,7 @@
       "brukeroppsett",
     ];
     if (phrases.some((phrase) => text.includes(phrase))) return true;
-    const words = new Set((text.match(/\w+/g) || []));
+    const words = new Set(text.match(/\w+/g) || []);
     let hits = 0;
     [
       "arbeidsrom",
@@ -283,8 +334,125 @@
         renderCaseMeta();
         renderQuickActions();
         renderQueryHint();
+        loadCorpus();
       };
     }
+  }
+
+  function renderBrowseVisibility() {
+    if (!caseIdEl.value) {
+      browsePanelEl.classList.add("hidden");
+      browseMetaEl.textContent = "Velg et case for å bla i dokumenter og følge lenker.";
+      clearBrowseLists();
+      return;
+    }
+    browsePanelEl.classList.remove("hidden");
+    browseMetaEl.textContent = "Bla i dokumenter for valgt case og følg lenker mellom kildene.";
+  }
+
+  function formatDocMeta(item) {
+    return [
+      item.source_type || null,
+      item.language || null,
+      item.year ? String(item.year) : null,
+      item.doc_state && item.doc_state !== "active" ? item.doc_state : null,
+      item.doc_id || null,
+    ].filter(Boolean).join(" · ");
+  }
+
+  function renderCorpusList() {
+    corpusListEl.innerHTML = "";
+    if (!currentCorpusItems.length) {
+      corpusListEl.innerHTML = '<li class="empty-state">Ingen dokumenter funnet for dette caset.</li>';
+      return;
+    }
+
+    currentCorpusItems.forEach((item) => {
+      const li = document.createElement("li");
+      li.className = "doc-item" + (item.doc_id === selectedCorpusDocId ? " selected" : "");
+
+      const title = document.createElement("div");
+      title.innerHTML = `<strong>${escapeHtml(item.title || item.doc_id || "(uten tittel)")}</strong>`;
+      li.appendChild(title);
+
+      const meta = document.createElement("div");
+      meta.className = "muted mono";
+      meta.textContent = formatDocMeta(item);
+      li.appendChild(meta);
+
+      const actions = document.createElement("div");
+      actions.className = "doc-actions";
+
+      const linksBtn = document.createElement("button");
+      linksBtn.type = "button";
+      linksBtn.textContent = "Vis lenker";
+      linksBtn.onclick = () => loadDocumentLinks(item.doc_id);
+      actions.appendChild(linksBtn);
+
+      const downloadLink = document.createElement("a");
+      downloadLink.href = `/v1/documents/${encodeURIComponent(item.doc_id)}/download`;
+      downloadLink.target = "_blank";
+      downloadLink.rel = "noopener";
+      downloadLink.textContent = "last ned";
+      actions.appendChild(downloadLink);
+
+      li.appendChild(actions);
+      corpusListEl.appendChild(li);
+    });
+  }
+
+  function renderLinkList(edges, docId, edgeCount) {
+    linksListEl.innerHTML = "";
+    linksMetaEl.textContent = `${docId} · ${edgeCount} lenker`;
+
+    if (!edges.length) {
+      linksListEl.innerHTML = '<li class="empty-state">Ingen lenker registrert for dette dokumentet.</li>';
+      return;
+    }
+
+    edges.forEach((edge) => {
+      const li = document.createElement("li");
+      li.className = "edge-item";
+
+      const targetLabel = edge.target_type === "internal"
+        ? (edge.target_title || edge.target_doc_id || edge.target_href)
+        : edge.target_href;
+      const heading = document.createElement("div");
+      heading.innerHTML = `<strong>${escapeHtml(targetLabel || "(uten mål)")}</strong>`;
+      li.appendChild(heading);
+
+      const meta = document.createElement("div");
+      meta.className = "muted mono";
+      meta.textContent = [
+        edge.target_type,
+        edge.label || null,
+        edge.target_doc_id || null,
+      ].filter(Boolean).join(" · ");
+      li.appendChild(meta);
+
+      if (edge.target_type === "internal" && edge.target_doc_id) {
+        const follow = document.createElement("div");
+        follow.className = "doc-actions";
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = "Følg lenke";
+        btn.onclick = () => loadDocumentLinks(edge.target_doc_id);
+        follow.appendChild(btn);
+        li.appendChild(follow);
+      } else if (edge.target_type === "external") {
+        const follow = document.createElement("div");
+        follow.className = "doc-actions";
+        const link = document.createElement("a");
+        link.href = edge.target_href;
+        link.target = "_blank";
+        link.rel = "noopener";
+        link.textContent = "åpne";
+        follow.appendChild(link);
+        li.appendChild(follow);
+      }
+
+      linksListEl.appendChild(li);
+    });
   }
 
   async function loadCases() {
@@ -294,7 +462,48 @@
       const payload = await res.json();
       renderCaseOptions(Array.isArray(payload.cases) ? payload.cases : []);
     } catch (_err) {
-      // UI should still work without explicit case listing.
+      renderBrowseVisibility();
+    }
+  }
+
+  async function loadCorpus() {
+    renderBrowseVisibility();
+    if (!caseIdEl.value) return;
+
+    clearBrowseLists();
+    corpusMetaEl.textContent = "laster…";
+    browseMetaEl.textContent = "Laster korpus for valgt case.";
+
+    try {
+      const res = await fetch(`/v1/cases/${encodeURIComponent(caseIdEl.value)}/corpus?limit=25`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const payload = await res.json();
+      currentCorpusItems = Array.isArray(payload.items) ? payload.items : [];
+      corpusMetaEl.textContent = `${payload.total || currentCorpusItems.length} dokumenter · viser ${currentCorpusItems.length}`;
+      browseMetaEl.textContent = "Bla i dokumenter for valgt case og følg lenker mellom kildene.";
+      renderCorpusList();
+    } catch (err) {
+      corpusMetaEl.textContent = "feil";
+      corpusListEl.innerHTML = `<li class="empty-state">Kunne ikke laste korpus: ${escapeHtml(err?.message || String(err))}</li>`;
+    }
+  }
+
+  async function loadDocumentLinks(docId) {
+    if (!caseIdEl.value || !docId) return;
+    selectedCorpusDocId = docId;
+    renderCorpusList();
+    linksMetaEl.textContent = `${docId} · laster…`;
+    linksListEl.innerHTML = "";
+
+    try {
+      const res = await fetch(`/v1/cases/${encodeURIComponent(caseIdEl.value)}/documents/${encodeURIComponent(docId)}/links`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const payload = await res.json();
+      const items = Array.isArray(payload.items) ? payload.items : [];
+      renderLinkList(items, docId, payload.edge_count || items.length);
+    } catch (err) {
+      linksMetaEl.textContent = `${docId} · feil`;
+      linksListEl.innerHTML = `<li class="empty-state">Kunne ikke laste lenker: ${escapeHtml(err?.message || String(err))}</li>`;
     }
   }
 
@@ -324,7 +533,7 @@
       setStatus("feil");
       sendBtn.disabled = false;
       stopBtn.disabled = true;
-      throw new Error(txt || ("HTTP " + res.status));
+      throw new Error(txt || (`HTTP ${res.status}`));
     }
 
     setStatus("streamer…");
@@ -345,8 +554,7 @@
 
       if (ev === "citations") {
         try {
-          const citations = JSON.parse(data);
-          renderCitations(citations);
+          renderCitations(JSON.parse(data));
         } catch (e) {
           logDebug("citations parse error: " + e);
         }
@@ -359,9 +567,7 @@
             obj.streaming_allowed === false ? "ikke-stream" : "stream",
           ];
           modeEl.textContent = parts.join(" · ");
-          if (obj.streaming_allowed === false) {
-            setStatus("arbeider …");
-          }
+          if (obj.streaming_allowed === false) setStatus("arbeider …");
           renderQueryHint(obj.case_guidance || null);
         } catch (e) {
           logDebug("query_plan parse error: " + e);
@@ -370,17 +576,14 @@
         try {
           const obj = JSON.parse(data);
           setStatus(obj.message || "arbeider …");
-        } catch (e) {
+        } catch (_e) {
           setStatus("arbeider …");
         }
       } else if (ev === "delta") {
         try {
           const obj = JSON.parse(data);
-          if (obj && typeof obj.delta === "string") {
-            answerEl.textContent += obj.delta;
-          }
-        } catch (e) {
-          // fallback if server ever sends raw text
+          if (obj && typeof obj.delta === "string") answerEl.textContent += obj.delta;
+        } catch (_e) {
           answerEl.textContent += data;
         }
       } else if (ev === "done") {
@@ -388,12 +591,11 @@
         sendBtn.disabled = false;
         stopBtn.disabled = true;
       } else if (ev === "error") {
-        debugLog("SSE error: " + data);
+        logDebug("SSE error: " + data);
         try {
           const obj = JSON.parse(data);
-          debugLog("SSE error parsed: " + JSON.stringify(obj, null, 2));
           answerEl.textContent = "Feil: " + (obj.message || data);
-        } catch (e) {
+        } catch (_e) {
           answerEl.textContent = "Feil: " + data;
         }
         setStatus("feil");
@@ -425,7 +627,6 @@
         }
         if (trimmed.startsWith("data:")) {
           dataLines.push(trimmed.slice(5).trim());
-          continue;
         }
       }
     }
@@ -458,11 +659,8 @@
     stopBtn.disabled = true;
   });
 
-  // ctrl/cmd + enter to send
   q.addEventListener("keydown", (ev) => {
-    if ((ev.ctrlKey || ev.metaKey) && ev.key === "Enter") {
-      sendBtn.click();
-    }
+    if ((ev.ctrlKey || ev.metaKey) && ev.key === "Enter") sendBtn.click();
   });
 
   q.addEventListener("input", () => {
@@ -473,18 +671,15 @@
     renderCaseMeta();
     renderQuickActions();
     renderQueryHint();
+    loadCorpus();
+  });
+
+  refreshCorpusBtn.addEventListener("click", () => {
+    loadCorpus();
   });
 
   loadCases();
 })();
-
-function debugLog(msg) {
-  const el = document.getElementById("debug");
-  if (el) {
-    el.textContent += msg + "\n";
-  }
-  console.log(msg);
-}
 </script>
 </body>
 </html>
