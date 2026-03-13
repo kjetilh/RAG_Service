@@ -49,6 +49,7 @@
     .filter-group { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
     .filter-chip { padding:6px 10px; font-size:13px; background:#fff; border:1px solid #ddd; border-radius:999px; }
     .filter-chip.active { background:#163963; color:#fff; border-color:#163963; }
+    .toolbar select { padding:8px 10px; font-size:14px; }
   </style>
 </head>
 <body>
@@ -123,6 +124,11 @@
           </div>
           <div class="toolbar">
             <input id="corpusSearch" type="search" placeholder="Filtrer på tittel eller doc_id" />
+            <select id="corpusSort">
+              <option value="title">Sorter: tittel</option>
+              <option value="source_type">Sorter: kildetype</option>
+              <option value="doc_id">Sorter: doc_id</option>
+            </select>
             <button id="searchCorpus" type="button">Søk</button>
             <button id="clearCorpusSearch" type="button">Nullstill</button>
           </div>
@@ -176,6 +182,7 @@
   const corpusMetaEl = $("corpusMeta");
   const corpusListEl = $("corpusList");
   const corpusSearchEl = $("corpusSearch");
+  const corpusSortEl = $("corpusSort");
   const searchCorpusBtn = $("searchCorpus");
   const clearCorpusSearchBtn = $("clearCorpusSearch");
   const corpusPagerMetaEl = $("corpusPagerMeta");
@@ -197,6 +204,7 @@
   let currentCorpusQuery = "";
   let currentCorpusTotal = 0;
   let currentCorpusOffset = 0;
+  let currentCorpusSort = "title";
   let currentLinkItems = [];
   let currentLinkContextLabel = "velg et dokument";
   let currentLinkFilter = "all";
@@ -413,6 +421,31 @@
     ].filter(Boolean).join(" · ");
   }
 
+  function sortCorpusItems(items) {
+    const sourceValue = (item) => String(item.source_type || "").toLowerCase();
+    const titleValue = (item) => String(item.title || "").toLowerCase();
+    const docIdValue = (item) => String(item.doc_id || "").toLowerCase();
+    const sorted = [...items];
+    sorted.sort((a, b) => {
+      if (currentCorpusSort === "source_type") {
+        return (
+          sourceValue(a).localeCompare(sourceValue(b))
+          || titleValue(a).localeCompare(titleValue(b))
+          || docIdValue(a).localeCompare(docIdValue(b))
+        );
+      }
+      if (currentCorpusSort === "doc_id") {
+        return docIdValue(a).localeCompare(docIdValue(b));
+      }
+      return (
+        titleValue(a).localeCompare(titleValue(b))
+        || sourceValue(a).localeCompare(sourceValue(b))
+        || docIdValue(a).localeCompare(docIdValue(b))
+      );
+    });
+    return sorted;
+  }
+
   function renderCorpusList() {
     corpusListEl.innerHTML = "";
     if (!currentCorpusItems.length) {
@@ -420,7 +453,7 @@
       return;
     }
 
-    currentCorpusItems.forEach((item) => {
+    sortCorpusItems(currentCorpusItems).forEach((item) => {
       const li = document.createElement("li");
       li.className = "doc-item" + (item.doc_id === selectedCorpusDocId ? " selected" : "");
 
@@ -455,15 +488,22 @@
   }
 
   function renderLinkFilterState() {
+    const counts = {
+      all: currentLinkItems.length,
+      internal: currentLinkItems.filter((edge) => edge.target_type === "internal").length,
+      external: currentLinkItems.filter((edge) => edge.target_type === "external").length,
+      unresolved: currentLinkItems.filter((edge) => edge.target_type === "unresolved").length,
+    };
     const entries = [
-      [linkFilterAllBtn, "all"],
-      [linkFilterInternalBtn, "internal"],
-      [linkFilterExternalBtn, "external"],
-      [linkFilterUnresolvedBtn, "unresolved"],
+      [linkFilterAllBtn, "all", "Alle"],
+      [linkFilterInternalBtn, "internal", "Internal"],
+      [linkFilterExternalBtn, "external", "External"],
+      [linkFilterUnresolvedBtn, "unresolved", "Unresolved"],
     ];
-    entries.forEach(([btn, value]) => {
+    entries.forEach(([btn, value, label]) => {
       if (!btn) return;
       btn.classList.toggle("active", currentLinkFilter === value);
+      btn.textContent = `${label} (${counts[value] || 0})`;
     });
   }
 
@@ -829,6 +869,11 @@
     corpusSearchEl.value = "";
     currentCorpusQuery = "";
     loadCorpus();
+  });
+
+  corpusSortEl.addEventListener("change", () => {
+    currentCorpusSort = corpusSortEl.value || "title";
+    renderCorpusList();
   });
 
   corpusSearchEl.addEventListener("keydown", (ev) => {
