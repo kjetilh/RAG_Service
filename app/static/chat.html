@@ -45,6 +45,7 @@
     .empty-state { color:#666; font-size:13px; line-height:1.35; }
     .toolbar { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:10px; }
     .toolbar input { flex:1 1 220px; min-width:180px; padding:8px 10px; font-size:14px; }
+    .pager { display:flex; gap:8px; align-items:center; justify-content:space-between; margin-top:10px; }
   </style>
 </head>
 <body>
@@ -123,6 +124,10 @@
             <button id="clearCorpusSearch" type="button">Nullstill</button>
           </div>
           <ul id="corpusList" class="doc-list"></ul>
+          <div class="pager">
+            <span id="corpusPagerMeta" class="muted mono">viser 0 av 0</span>
+            <button id="loadMoreCorpus" type="button" class="hidden">Vis flere</button>
+          </div>
         </div>
         <div class="list-panel">
           <div class="row" style="justify-content:space-between; align-items:center;">
@@ -164,16 +169,21 @@
   const corpusSearchEl = $("corpusSearch");
   const searchCorpusBtn = $("searchCorpus");
   const clearCorpusSearchBtn = $("clearCorpusSearch");
+  const corpusPagerMetaEl = $("corpusPagerMeta");
+  const loadMoreCorpusBtn = $("loadMoreCorpus");
   const linksMetaEl = $("linksMeta");
   const linksListEl = $("linksList");
   const loadCaseLinksBtn = $("loadCaseLinks");
   const clearLinksViewBtn = $("clearLinksView");
 
+  const CORPUS_PAGE_SIZE = 25;
   let aborter = null;
   let caseMap = new Map();
   let currentCorpusItems = [];
   let selectedCorpusDocId = null;
   let currentCorpusQuery = "";
+  let currentCorpusTotal = 0;
+  let currentCorpusOffset = 0;
 
   function setStatus(text) {
     statusEl.textContent = text;
@@ -197,10 +207,16 @@
   function clearBrowseLists() {
     currentCorpusItems = [];
     selectedCorpusDocId = null;
+    currentCorpusTotal = 0;
+    currentCorpusOffset = 0;
     corpusListEl.innerHTML = "";
     linksListEl.innerHTML = "";
     corpusMetaEl.textContent = "0 dokumenter";
     linksMetaEl.textContent = "velg et dokument";
+    corpusPagerMetaEl.textContent = "viser 0 av 0";
+    loadMoreCorpusBtn.classList.add("hidden");
+    loadMoreCorpusBtn.disabled = false;
+    loadMoreCorpusBtn.textContent = "Vis flere";
   }
 
   function escapeHtml(s) {
@@ -474,10 +490,23 @@
 
   function corpusQueryString() {
     const params = new URLSearchParams();
-    params.set("limit", "25");
+    params.set("limit", String(CORPUS_PAGE_SIZE));
+    params.set("offset", String(currentCorpusOffset));
     const value = String(currentCorpusQuery || "").trim();
     if (value) params.set("q", value);
     return params.toString();
+  }
+
+  function renderCorpusPager() {
+    const shown = currentCorpusItems.length;
+    corpusPagerMetaEl.textContent = `viser ${shown} av ${currentCorpusTotal}`;
+    if (shown < currentCorpusTotal) {
+      loadMoreCorpusBtn.classList.remove("hidden");
+      loadMoreCorpusBtn.disabled = false;
+    } else {
+      loadMoreCorpusBtn.classList.add("hidden");
+      loadMoreCorpusBtn.disabled = false;
+    }
   }
 
   async function loadCases() {
@@ -491,11 +520,18 @@
     }
   }
 
-  async function loadCorpus() {
+  async function loadCorpus(append = false) {
     renderBrowseVisibility();
     if (!caseIdEl.value) return;
 
-    clearBrowseLists();
+    if (!append) {
+      clearBrowseLists();
+      currentCorpusOffset = 0;
+    } else {
+      currentCorpusOffset = currentCorpusItems.length;
+      loadMoreCorpusBtn.disabled = true;
+      loadMoreCorpusBtn.textContent = "Laster…";
+    }
     corpusMetaEl.textContent = "laster…";
     browseMetaEl.textContent = "Laster korpus for valgt case.";
 
@@ -503,14 +539,22 @@
       const res = await fetch(`/v1/cases/${encodeURIComponent(caseIdEl.value)}/corpus?${corpusQueryString()}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const payload = await res.json();
-      currentCorpusItems = Array.isArray(payload.items) ? payload.items : [];
+      const newItems = Array.isArray(payload.items) ? payload.items : [];
+      currentCorpusTotal = Number(payload.total || 0);
+      currentCorpusItems = append ? currentCorpusItems.concat(newItems) : newItems;
       const querySuffix = currentCorpusQuery ? ` · filter=${currentCorpusQuery}` : "";
-      corpusMetaEl.textContent = `${payload.total || currentCorpusItems.length} dokumenter · viser ${currentCorpusItems.length}${querySuffix}`;
+      corpusMetaEl.textContent = `${currentCorpusTotal || currentCorpusItems.length} dokumenter · viser ${currentCorpusItems.length}${querySuffix}`;
       browseMetaEl.textContent = "Bla i dokumenter for valgt case og følg lenker mellom kildene.";
       renderCorpusList();
+      renderCorpusPager();
     } catch (err) {
       corpusMetaEl.textContent = "feil";
       corpusListEl.innerHTML = `<li class="empty-state">Kunne ikke laste korpus: ${escapeHtml(err?.message || String(err))}</li>`;
+      corpusPagerMetaEl.textContent = "viser 0 av 0";
+      loadMoreCorpusBtn.classList.add("hidden");
+    } finally {
+      loadMoreCorpusBtn.disabled = false;
+      loadMoreCorpusBtn.textContent = "Vis flere";
     }
   }
 
@@ -746,6 +790,10 @@
 
   loadCaseLinksBtn.addEventListener("click", () => {
     loadCaseLinks();
+  });
+
+  loadMoreCorpusBtn.addEventListener("click", () => {
+    loadCorpus(true);
   });
 
   clearLinksViewBtn.addEventListener("click", () => {
