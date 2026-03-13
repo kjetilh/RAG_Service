@@ -109,20 +109,35 @@ POLICY_PATTERNS = [
 
 QUESTION_FINDINGS_PATTERNS = [
     "funnene pr spørsmål",
+    "funnene pr. spørsmål",
     "funn pr spørsmål",
+    "funn pr. spørsmål",
     "funnene per spørsmål",
     "funn per spørsmål",
     "hva er funnene pr spørsmål",
+    "hva er funnene pr. spørsmål",
     "hva er funnene per spørsmål",
+    "oppsummering pr spørsmål",
+    "oppsummering pr. spørsmål",
+    "oppsummering per spørsmål",
+    "oppsummering fra intervjuguiden",
+    "oppsummering pr spørsmål fra intervjuguiden",
+    "oppsummering pr. spørsmål fra intervjuguiden",
+    "oppsummering per spørsmål fra intervjuguiden",
 ]
 
 PER_INTERVIEW_PATTERNS = [
     "oppsummering pr intervju",
+    "oppsummering pr. intervju",
     "oppsummering per intervju",
     "oppsummer pr intervju",
+    "oppsummer pr. intervju",
     "oppsummer per intervju",
     "hovedtrekk pr intervju",
+    "hovedtrekk pr. intervju",
     "hovedtrekk per intervju",
+    "gå gjennom alle intervjuene",
+    "gå igjennom alle intervjuene",
 ]
 
 INTERVIEW_PATTERNS_OVERVIEW = [
@@ -148,6 +163,20 @@ CHAPTER_STRUCTURE_PATTERNS = [
     "kapitteloppsett",
     "struktur for boka",
     "struktur for boken",
+]
+
+ARTICLE_HYPOTHESIS_PATTERNS = [
+    "hovedhypotese",
+    "hovedhypoteser",
+    "arbeidshypotese",
+    "arbeidshypoteser",
+    "hypotese",
+    "hypoteser",
+    "utfordringer artikkelen bør adressere",
+    "utfordringer som artikkelen bør adressere",
+    "hva artikkelen bør adressere",
+    "problemstillinger artikkelen bør adressere",
+    "hovedutfordringer artikkelen bør adressere",
 ]
 
 WORKSPACE_RECIPE_PATTERNS = [
@@ -241,6 +270,18 @@ Når både litteratur og intervjuer er relevante, skill tydelig mellom:
 - hva som er nøktern syntese
 Hvis brukeren ber om kort svar, svar kort.
 Hvis brukeren ber om drøfting eller analyse, utvid de relevante delene."""
+
+
+ARTICLE_HYPOTHESES_CONTRACT = """## Arbeidshypoteser og utfordringer for artikkelen
+List 3-6 nøkterne arbeidshypoteser eller sentrale utfordringer artikkelen bør adressere.
+
+For hvert punkt:
+- formuler en presis arbeidshypotese eller utfordring
+- si hvorfor dette ser viktig ut i materialet
+- forklar kort hva artikkelen bør undersøke, dokumentere eller nyansere
+- pek ut tydelige forbehold hvis grunnlaget er svakt eller sprikende
+
+Ikke presenter hypotesene som etablerte sannheter. Hold dem eksplisitt som arbeidshypoteser eller analysetemaer."""
 
 
 WORKSPACE_RECIPE_CONTRACT = """## Kort anbefaling
@@ -410,6 +451,25 @@ def choose_answer_mode(
             rewrite_query=False,
             use_subquery_planner=False,
             default_prompt_case_id="innovasjon_intervjuer",
+            detail_level=detail_level,
+        )
+
+    if _contains_any(message_lc, ARTICLE_HYPOTHESIS_PATTERNS):
+        source_strategy = "hybrid" if case_id == "innovasjon_bokskriving" and interviews and articles else "interviews"
+        return AnswerModePlan(
+            answer_mode="article_hypotheses",
+            source_strategy=source_strategy,
+            response_shape="article_hypotheses",
+            streaming_allowed=False,
+            rewrite_query=False,
+            use_subquery_planner=False,
+            default_prompt_case_id="innovasjon_bokskriving" if _is_innovation_case(case_id) else case_id,
+            question_set_path=INTERVIEW_QUESTION_SET_PATH,
+            answer_contract=ARTICLE_HYPOTHESES_CONTRACT,
+            planner_focus=(
+                "Trekk ut noen få arbeidshypoteser eller sentrale utfordringer som artikkelen bør adressere, "
+                "og skill tydelig mellom godt belagte mønstre og punkter som fortsatt trenger mer dokumentasjon."
+            ),
             detail_level=detail_level,
         )
 

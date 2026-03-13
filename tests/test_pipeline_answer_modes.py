@@ -143,6 +143,59 @@ def test_answer_question_formats_per_interview_summary(monkeypatch):
     assert resp.retrieval_debug["query_plan"]["answer_mode"] == "interview_summary_per_interview"
 
 
+def test_answer_question_formats_detailed_per_interview_summary(monkeypatch):
+    mode = AnswerModePlan(
+        answer_mode="interview_summary_per_interview",
+        source_strategy="interviews",
+        response_shape="per_interview",
+        streaming_allowed=False,
+        rewrite_query=False,
+        use_subquery_planner=False,
+        default_prompt_case_id="innovasjon_intervjuer",
+        detail_level="detailed",
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "plan_query",
+        lambda _message, filters=None: PlanResult(
+            filters=filters or {"source_type": ["innovasjon_intervju_transcript"]},
+            retrieval={"top_k_vector": 5, "top_k_lexical": 5, "top_k_final": 5, "max_chunks_per_doc": 3},
+            trace={"planner_mode": "deterministic", **mode.as_trace()},
+            prompt_instruction=None,
+            case_id="innovasjon_bokskriving",
+            evaluation=EvaluationConfig(min_citations=1, min_unique_docs=1, min_avg_score=0.0, enforce=False),
+            answer_mode=mode,
+        ),
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "_list_documents",
+        lambda *_args, **_kwargs: [
+            {"doc_id": "d1", "title": "Intervju A", "source_type": "innovasjon_intervju_transcript"},
+        ],
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "_retrieve_structured_bundle",
+        lambda **kwargs: {
+            "effective_query": kwargs["query"],
+            "citations": [_citation(1), _citation(2)],
+        },
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "_summarize_structured_items",
+        lambda **_kwargs: {
+            "d1": {"summary": "Detaljert oppsummering for d1 med flere setninger.", "coverage": "medium", "warning": None},
+        },
+    )
+
+    resp = pipeline.answer_question("Gå igjennom alle intervjuene og lag en detaljert oppsummering pr. intervju.")
+
+    assert "## Detaljert oppsummering per intervju" in resp.answer
+    assert "### Intervju A" in resp.answer
+
+
 def test_answer_question_passes_dynamic_contract_for_general_mode(monkeypatch):
     mode = AnswerModePlan(
         answer_mode="general",
@@ -327,6 +380,67 @@ def test_answer_question_formats_interview_gap_mode_without_technical_drift(monk
     assert "API-adferd" not in resp.answer
     assert "Q1" in resp.answer
     assert resp.retrieval_debug["query_plan"]["answer_mode"] == "interview_gap_analysis"
+
+
+def test_answer_question_formats_article_hypotheses(monkeypatch):
+    mode = AnswerModePlan(
+        answer_mode="article_hypotheses",
+        source_strategy="hybrid",
+        response_shape="article_hypotheses",
+        streaming_allowed=False,
+        rewrite_query=False,
+        use_subquery_planner=False,
+        default_prompt_case_id="innovasjon_bokskriving",
+        question_set_path="config/interview_questions_innovasjonspolitikk.yml",
+    )
+    monkeypatch.setattr(pipeline, "plan_query", lambda *_args, **_kwargs: _plan(mode))
+    monkeypatch.setattr(
+        pipeline,
+        "prepare_question_set",
+        lambda **_kwargs: SimpleNamespace(
+            question_set_id="qs-1",
+            questions=[
+                SimpleNamespace(question_id="Q1", text="Hva fungerer?"),
+                SimpleNamespace(question_id="Q2", text="Hva mangler?"),
+            ],
+        ),
+    )
+    bundles = [
+        {"effective_query": "Hva fungerer?", "citations": [_citation(1), _citation(2)]},
+        {"effective_query": "Hva mangler?", "citations": [_citation(3), _citation(4)]},
+    ]
+    monkeypatch.setattr(pipeline, "_retrieve_structured_bundle", lambda **_kwargs: bundles.pop(0))
+    monkeypatch.setattr(
+        pipeline,
+        "_summarize_structured_items",
+        lambda **_kwargs: {
+            "Q1": {"summary": "Virkemidlene virker best tidlig i lopet.", "coverage": "medium", "warning": None},
+            "Q2": {"summary": "Skaleringsfasen er svakere dekket og svakere stottet.", "coverage": "medium", "warning": None},
+        },
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "_synthesize_article_hypotheses",
+        lambda **_kwargs: [
+            {
+                "title": "Fragmentert virkemiddelkjede",
+                "claim": "Det ser ut til at overgangen fra tidligfase til skalering er fragmentert.",
+                "why_it_matters": "Dette kan forklare hvorfor gode prosjekter stopper opp.",
+                "article_move": "Artikkelen bør vise hvordan denne fragmenteringen oppstår og hvilke konsekvenser den får.",
+                "support_question_ids": ["Q1", "Q2"],
+                "warning": "Arbeidshypotese, ikke etablert konklusjon.",
+            }
+        ],
+    )
+
+    resp = pipeline.answer_question("Lag noen hovedhypoteser og utfordringer som artikkelen bør adressere.")
+
+    assert "## Arbeidshypoteser og utfordringer for artikkelen" in resp.answer
+    assert "### 1. Fragmentert virkemiddelkjede" in resp.answer
+    assert "Arbeidshypotese, ikke etablert konklusjon." in resp.answer
+    assert "Bygger særlig på: Q1, Q2" in resp.answer
+    assert resp.retrieval_debug["query_plan"]["answer_mode"] == "article_hypotheses"
+    assert resp.retrieval_debug["query_plan"]["structured_generation_mode"] == "retrieval_many_llm_two"
 
 
 def test_answer_question_stream_emits_status_for_non_streaming_modes(monkeypatch):

@@ -45,32 +45,37 @@ def case_quick_actions(case_id: str) -> list[dict[str, str]]:
     if case_id == "innovasjon_intervjuer":
         return [
             {
-                "label": "Hovedtrekk",
-                "description": "Oppsummer hovedtrekkene i intervjuene.",
-                "prompt": "Hva er hovedtrekkene i intervjuene om innovasjonspolitikk og virkemidler?",
+                "label": "Detaljert per intervju",
+                "description": "Gå gjennom alle intervjuene og lag en detaljert oppsummering per intervju.",
+                "prompt": "Gå igjennom alle intervjuene og lag en detaljert oppsummering pr. intervju.",
             },
             {
-                "label": "Svak dekning",
-                "description": "Finn temaer som er svakt belagt i intervjuene.",
-                "prompt": "Hvilke spørsmål eller temaer har svakest dekning i intervjuene, og hva mangler vi dokumentasjon på?",
+                "label": "Per spørsmål",
+                "description": "Oppsummer hva intervjuene viser for hvert spørsmål i intervjuguiden.",
+                "prompt": "Lag oppsummering pr. spørsmål fra intervjuguiden. Vis sitater der de faktisk bærer poenget.",
+            },
+            {
+                "label": "Hypoteser",
+                "description": "Trekk ut hovedhypoteser og utfordringer artikkelen bør adressere.",
+                "prompt": "Lag noen hovedhypoteser og utfordringer som artikkelen bør adressere basert på intervjuene.",
             },
         ]
     if case_id == "innovasjon_bokskriving":
         return [
             {
-                "label": "Funn per spørsmål",
-                "description": "Lister spørsmålene med oppsummering og sitater.",
-                "prompt": "Hva er funnene pr spørsmål? Vis sitater.",
+                "label": "Per spørsmål",
+                "description": "Oppsummer hva intervjuene viser for hvert spørsmål i intervjuguiden.",
+                "prompt": "Lag oppsummering pr. spørsmål fra intervjuguiden. Vis sitater der de faktisk bærer poenget.",
             },
             {
-                "label": "Oppsummer per intervju",
-                "description": "Vis hovedtrekk per intervju.",
-                "prompt": "Gi en oppsummering pr intervju av hovedtrekkene.",
+                "label": "Detaljert per intervju",
+                "description": "Gå gjennom alle intervjuene og lag en detaljert oppsummering per intervju.",
+                "prompt": "Gå igjennom alle intervjuene og lag en detaljert oppsummering pr. intervju.",
             },
             {
-                "label": "Hovedtrekk i intervjuene",
-                "description": "Oppsummer fellestrekk, nyanser og sprik.",
-                "prompt": "Hva er hovedtrekkene i intervjuene om innovasjonspolitikk og virkemidler?",
+                "label": "Hypoteser",
+                "description": "Trekk ut hovedhypoteser og utfordringer artikkelen bør adressere.",
+                "prompt": "Lag noen hovedhypoteser og utfordringer som artikkelen bør adressere basert på intervjuene og materialet ellers.",
             },
             {
                 "label": "Kapittelstruktur",

@@ -623,12 +623,41 @@ def _fallback_structured_summary(citations: list[Citation]) -> str:
     return " ".join(part for part in parts if part).strip() or "Grunnlaget er svakt og krever manuell kontroll."
 
 
+def _structured_summary_instruction(*, item_kind: str, detail_level: str, message: str) -> str:
+    del message
+    if item_kind == "question":
+        if detail_level == "detailed":
+            return (
+                "For hvert spørsmål skal du lage en detaljert oppsummering på 4-6 setninger. "
+                "Få fram hva intervjuene samlet peker mot, viktige nyanser eller sprik, og hva som fortsatt er svakt belagt."
+            )
+        return (
+            "For hvert spørsmål skal du lage en nøktern oppsummering på 2-4 setninger av hva intervjuene samlet peker mot. "
+            "Hvis grunnlaget er svakt, si det eksplisitt."
+        )
+    if item_kind == "interview":
+        if detail_level == "detailed":
+            return (
+                "For hvert intervju skal du lage en detaljert oppsummering på 4-7 setninger. "
+                "Få fram hovedpoenger, særskilte perspektiver, hva intervjuet særlig belyser, og eventuelle forbehold eller hull."
+            )
+        return (
+            "For hvert intervju skal du lage en nøktern oppsummering på 2-4 setninger. "
+            "Få fram hovedpoengene og si eksplisitt fra hvis grunnlaget er begrenset."
+        )
+    return (
+        "For hvert item skal du lage en kort, nøktern oppsummering på 2-4 setninger. "
+        "Hvis grunnlaget er svakt, si det eksplisitt."
+    )
+
+
 def _summarize_structured_items(
     *,
     item_kind: str,
     message: str,
     items: list[dict[str, Any]],
     model_profile: str | None,
+    detail_level: str = "standard",
 ) -> dict[str, dict[str, Any]]:
     if not items:
         return {}
@@ -657,7 +686,7 @@ def _summarize_structured_items(
     user = (
         f"SPORSMAL_FRA_BRUKER: {message}\n"
         f"ITEM_TYPE: {item_kind}\n"
-        "For hvert item skal du returnere en kort oppsummering på 2-4 setninger. "
+        f"{_structured_summary_instruction(item_kind=item_kind, detail_level=detail_level, message=message)} "
         "Hvis grunnlaget er svakt, si det eksplisitt. Ikke bruk referanser som [1]. "
         "Sett coverage til high når flere utdrag peker i samme retning, medium når grunnlaget er brukbart men begrenset, "
         "og low bare når evidensen faktisk er tynn eller sprikende.\n"
@@ -703,9 +732,22 @@ def _summarize_structured_items(
     return summaries
 
 
-def _render_question_matrix(question_items: list[dict[str, Any]], plan: PlanResult, question_set_id: str) -> ChatResponse:
+def _render_question_matrix(
+    question_items: list[dict[str, Any]],
+    plan: PlanResult,
+    question_set_id: str,
+    *,
+    message: str,
+) -> ChatResponse:
     citations, index_by_key = _collect_citations_registry()
-    lines = ["## Funn per spørsmål"]
+    answer_mode = plan.answer_mode
+    detail_level = answer_mode.detail_level if answer_mode else "standard"
+    heading = "## Oppsummering per spørsmål fra intervjuguiden"
+    if "funn" in (message or "").lower():
+        heading = "## Funn per spørsmål fra intervjuguiden"
+    if detail_level != "detailed" and "oppsummer" not in (message or "").lower():
+        heading = "## Funn per spørsmål"
+    lines = [heading]
     item_debug: list[dict[str, Any]] = []
 
     for item in question_items:
@@ -797,6 +839,7 @@ def _collect_question_items(
         message=message,
         items=question_items,
         model_profile=model_profile,
+        detail_level=plan.answer_mode.detail_level if plan.answer_mode else "standard",
     )
     for item in question_items:
         summary = summaries.get(item["item_id"], {})
@@ -822,7 +865,7 @@ def _run_collective_question_mode(
         model_profile=model_profile,
         prompt_profile_case_id=prompt_profile_case_id,
     )
-    return _render_question_matrix(question_items, plan, question_set_id)
+    return _render_question_matrix(question_items, plan, question_set_id, message=message)
 
 
 def _gap_rank(item: dict[str, Any]) -> tuple[int, int, int, str]:
@@ -936,9 +979,19 @@ def _run_interview_gap_mode(
     return _render_interview_gap_report(question_items, plan, question_set_id)
 
 
-def _render_per_interview_summary(*, rows: list[dict[str, Any]], summaries: list[dict[str, Any]], plan: PlanResult) -> ChatResponse:
+def _render_per_interview_summary(
+    *,
+    rows: list[dict[str, Any]],
+    summaries: list[dict[str, Any]],
+    plan: PlanResult,
+    message: str,
+) -> ChatResponse:
     citations, index_by_key = _collect_citations_registry()
-    lines = ["## Oppsummering per intervju"]
+    detail_level = plan.answer_mode.detail_level if plan.answer_mode else "standard"
+    heading = "## Detaljert oppsummering per intervju" if detail_level == "detailed" else "## Oppsummering per intervju"
+    if "hovedtrekk" in (message or "").lower() and detail_level != "detailed":
+        heading = "## Hovedtrekk per intervju"
+    lines = [heading]
 
     for row, summary in zip(rows, summaries):
         lines.append("")
@@ -1026,6 +1079,7 @@ def _run_per_interview_mode(
             for row, summary in zip(rows, summaries)
         ],
         model_profile=model_profile,
+        detail_level=plan.answer_mode.detail_level if plan.answer_mode else "standard",
     )
     for summary in summaries:
         item = structured.get(summary["item_id"], {})
@@ -1033,7 +1087,215 @@ def _run_per_interview_mode(
         summary["coverage"] = item.get("coverage")
         summary["warning"] = item.get("warning")
 
-    return _render_per_interview_summary(rows=rows, summaries=summaries, plan=plan)
+    return _render_per_interview_summary(rows=rows, summaries=summaries, plan=plan, message=message)
+
+
+def _fallback_article_hypotheses(question_items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    ranked = sorted(
+        question_items,
+        key=lambda item: (
+            -len({c.doc_id for c in list(item.get("citations") or []) if c.doc_id}),
+            -len(list(item.get("citations") or [])),
+            str(item.get("question_id") or ""),
+        ),
+    )
+    out: list[dict[str, Any]] = []
+    for item in ranked[:4]:
+        question_id = str(item.get("question_id") or "").strip()
+        question_text = str(item.get("question") or "").strip()
+        summary = sanitize_text_without_citations(str(item.get("summary") or "").strip())
+        out.append(
+            {
+                "title": f"Arbeidshypotese knyttet til {question_id}" if question_id else "Arbeidshypotese",
+                "claim": summary or question_text or "Materialet er for tynt til en robust hypotese.",
+                "why_it_matters": f"Dette går igjen i materialet rundt spørsmålet «{question_text}»." if question_text else "",
+                "article_move": "Artikkelen bør undersøke dette eksplisitt og være tydelig på hva som er godt belagt og hva som fortsatt er usikkert.",
+                "support_question_ids": [question_id] if question_id else [],
+                "warning": "Fallback synthesis used because structured hypothesis extraction was incomplete.",
+            }
+        )
+    return out
+
+
+def _synthesize_article_hypotheses(
+    *,
+    message: str,
+    question_items: list[dict[str, Any]],
+    model_profile: str | None,
+) -> list[dict[str, Any]]:
+    if not question_items:
+        return []
+
+    provider = default_provider(model_profile=model_profile)
+    prompt_items = [
+        {
+            "question_id": str(item.get("question_id") or ""),
+            "question": str(item.get("question") or ""),
+            "summary": sanitize_text_without_citations(str(item.get("summary") or "")),
+            "coverage": str(item.get("coverage") or ""),
+            "warning": str(item.get("warning") or ""),
+            "evidence": [
+                {
+                    "title": citation.title,
+                    "doc_id": citation.doc_id,
+                    "excerpt": trim_excerpt(citation.excerpt, limit=220),
+                }
+                for citation in list(item.get("citations") or [])[:3]
+            ],
+        }
+        for item in question_items
+    ]
+
+    system = (
+        "Du lager nøkterne arbeidshypoteser og utfordringer for en artikkel. "
+        "Bruk bare materialet du får. Ikke presenter hypotesene som etablerte sannheter. "
+        "Returner KUN gyldig JSON."
+    )
+    user = (
+        f"SPORSMAL_FRA_BRUKER: {message}\n"
+        "Lag 3-6 arbeidshypoteser eller sentrale utfordringer artikkelen bør adressere. "
+        "Hver hypotese må være forankret i ett eller flere spørsmål fra intervjuguiden.\n"
+        "Returner JSON på formen:\n"
+        '{"items":[{"title":"...","claim":"...","why_it_matters":"...","article_move":"...","support_question_ids":["Q1","Q2"],"warning":"..."}]}\n\n'
+        f"GRUNNLAG:\n{json.dumps(prompt_items, ensure_ascii=False)}"
+    )
+
+    try:
+        with _LLM_SEM:
+            raw = provider.chat(
+                [
+                    LLMMessage(role="system", content=system),
+                    LLMMessage(role="user", content=user),
+                ]
+            )
+        payload = _extract_json_object(raw)
+    except Exception:
+        payload = None
+
+    hypotheses: list[dict[str, Any]] = []
+    valid_question_ids = {str(item.get("question_id") or "") for item in question_items}
+    for entry in list(payload.get("items") or []) if isinstance(payload, dict) else []:
+        if not isinstance(entry, dict):
+            continue
+        title = str(entry.get("title") or "").strip()
+        claim = str(entry.get("claim") or "").strip()
+        if not title and not claim:
+            continue
+        support_question_ids = [
+            question_id
+            for question_id in _normalize_string_list(entry.get("support_question_ids"))
+            if question_id in valid_question_ids
+        ]
+        hypotheses.append(
+            {
+                "title": title or "Arbeidshypotese",
+                "claim": claim,
+                "why_it_matters": str(entry.get("why_it_matters") or "").strip(),
+                "article_move": str(entry.get("article_move") or "").strip(),
+                "support_question_ids": support_question_ids,
+                "warning": str(entry.get("warning") or "").strip() or None,
+            }
+        )
+
+    if not hypotheses:
+        return _fallback_article_hypotheses(question_items)
+    return hypotheses[:6]
+
+
+def _render_article_hypotheses(
+    hypotheses: list[dict[str, Any]],
+    question_items: list[dict[str, Any]],
+    plan: PlanResult,
+    question_set_id: str,
+) -> ChatResponse:
+    citations, index_by_key = _collect_citations_registry()
+    question_index = {str(item.get("question_id") or ""): item for item in question_items}
+    lines = ["## Arbeidshypoteser og utfordringer for artikkelen"]
+    structured_debug: list[dict[str, Any]] = []
+
+    if not hypotheses:
+        lines.append("Det finnes ikke nok robust grunnlag i intervjuene til å formulere nøkterne arbeidshypoteser.")
+
+    for idx, hypothesis in enumerate(hypotheses, start=1):
+        title = str(hypothesis.get("title") or "").strip() or f"Arbeidshypotese {idx}"
+        claim = sanitize_text_without_citations(str(hypothesis.get("claim") or "").strip())
+        why_it_matters = sanitize_text_without_citations(str(hypothesis.get("why_it_matters") or "").strip())
+        article_move = sanitize_text_without_citations(str(hypothesis.get("article_move") or "").strip())
+        warning = sanitize_text_without_citations(str(hypothesis.get("warning") or "").strip())
+        support_question_ids = [
+            question_id
+            for question_id in _normalize_string_list(hypothesis.get("support_question_ids"))
+            if question_id in question_index
+        ]
+
+        lines.append("")
+        lines.append(f"### {idx}. {title}")
+        lines.append(claim or "Grunnlaget er for svakt til å formulere en robust arbeidshypotese.")
+        if why_it_matters:
+            lines.append(f"Hvorfor dette bør adresseres: {why_it_matters}")
+        if article_move:
+            lines.append(f"Hva artikkelen bør gjøre: {article_move}")
+        if support_question_ids:
+            lines.append("Bygger særlig på: " + ", ".join(support_question_ids))
+        if warning:
+            lines.append(f"Forbehold: {warning}")
+
+        support_citations: list[Citation] = []
+        for question_id in support_question_ids:
+            support_citations.extend(list(question_index[question_id].get("citations") or []))
+        display_citations = _select_display_citations(support_citations, limit=3)
+        refs: list[int] = []
+        quote_lines: list[str] = []
+        for citation, display_excerpt in display_citations:
+            ref = _register_citation(citation, citations, index_by_key)
+            refs.append(ref)
+            quote_lines.append(f'- [{ref}] "{display_excerpt}" ({citation.title})')
+        if refs:
+            lines.append("Kilder: " + ", ".join(f"[{ref}]" for ref in refs))
+            lines.append("Dokumenterte utdrag:")
+            lines.extend(quote_lines)
+
+        structured_debug.append(
+            {
+                "title": title,
+                "support_question_ids": support_question_ids,
+                "citation_count": len(support_citations),
+            }
+        )
+
+    debug = {
+        "query_plan": {
+            **dict(plan.trace),
+            "structured_item_count": len(question_items),
+            "question_set_id": question_set_id,
+            "structured_generation_mode": "retrieval_many_llm_two",
+        },
+        "structured_items": structured_debug,
+    }
+    return ChatResponse(answer="\n".join(lines).strip(), citations=citations, retrieval_debug=debug)
+
+
+def _run_article_hypotheses_mode(
+    *,
+    message: str,
+    plan: PlanResult,
+    top_k: int | None,
+    model_profile: str | None,
+    prompt_profile_case_id: str | None,
+) -> ChatResponse:
+    question_set_id, question_items = _collect_question_items(
+        message=message,
+        plan=plan,
+        top_k=top_k,
+        model_profile=model_profile,
+        prompt_profile_case_id=prompt_profile_case_id,
+    )
+    hypotheses = _synthesize_article_hypotheses(
+        message=message,
+        question_items=question_items,
+        model_profile=model_profile,
+    )
+    return _render_article_hypotheses(hypotheses, question_items, plan, question_set_id)
 
 
 def _run_multi_query_mode(
@@ -1125,6 +1387,15 @@ def answer_question(
 
     if answer_mode == "interview_summary_per_interview":
         return _run_per_interview_mode(
+            message=message,
+            plan=plan,
+            top_k=top_k,
+            model_profile=model_profile,
+            prompt_profile_case_id=prompt_profile_case_id,
+        )
+
+    if answer_mode == "article_hypotheses":
+        return _run_article_hypotheses_mode(
             message=message,
             plan=plan,
             top_k=top_k,

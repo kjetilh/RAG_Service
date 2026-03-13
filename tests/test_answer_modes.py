@@ -34,6 +34,21 @@ def test_choose_answer_mode_detects_chapter_structure_and_hybrid_strategy():
     assert plan.default_prompt_case_id == "innovasjon_bokskriving"
 
 
+def test_choose_answer_mode_detects_article_hypotheses_for_book_case():
+    plan = choose_answer_mode(
+        message="Lag noen hovedhypoteser og utfordringer som artikkelen bør adressere basert på intervjuene og materialet ellers.",
+        case_id="innovasjon_bokskriving",
+        docs_source_types=["innovasjonsledelse", "innovasjonsfag", "innovasjon_intervju_transcript"],
+        selected_domain="docs",
+    )
+
+    assert plan.answer_mode == "article_hypotheses"
+    assert plan.source_strategy == "hybrid"
+    assert plan.streaming_allowed is False
+    assert plan.question_set_path == "config/interview_questions_innovasjonspolitikk.yml"
+    assert "arbeidshypoteser" in (plan.answer_contract or "")
+
+
 def test_choose_answer_mode_keeps_interview_gap_question_in_interview_lane():
     plan = choose_answer_mode(
         message="Hvilke spørsmål eller temaer har svakest dekning i intervjuene, og hva mangler vi dokumentasjon på?",
@@ -46,6 +61,19 @@ def test_choose_answer_mode_keeps_interview_gap_question_in_interview_lane():
     assert plan.source_strategy == "interviews"
     assert plan.streaming_allowed is False
     assert "Svakest dekning i intervjuene" in (plan.answer_contract or "")
+
+
+def test_choose_answer_mode_treats_detailed_per_interview_as_detailed():
+    plan = choose_answer_mode(
+        message="Gå igjennom alle intervjuene og lag en detaljert oppsummering pr. intervju.",
+        case_id="innovasjon_bokskriving",
+        docs_source_types=["innovasjonsledelse", "innovasjonsfag", "innovasjon_intervju_transcript"],
+        selected_domain="docs",
+    )
+
+    assert plan.answer_mode == "interview_summary_per_interview"
+    assert plan.source_strategy == "interviews"
+    assert plan.detail_level == "detailed"
 
 
 def test_choose_answer_mode_adds_policy_focus_for_innovation_policy_questions():
