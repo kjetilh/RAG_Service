@@ -43,6 +43,8 @@
     .doc-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; align-items:center; }
     .doc-actions a { font-size:13px; }
     .empty-state { color:#666; font-size:13px; line-height:1.35; }
+    .toolbar { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:10px; }
+    .toolbar input { flex:1 1 220px; min-width:180px; padding:8px 10px; font-size:14px; }
   </style>
 </head>
 <body>
@@ -115,12 +117,21 @@
             <strong>Korpus</strong>
             <span class="muted mono" id="corpusMeta">0 dokumenter</span>
           </div>
+          <div class="toolbar">
+            <input id="corpusSearch" type="search" placeholder="Filtrer på tittel eller doc_id" />
+            <button id="searchCorpus" type="button">Søk</button>
+            <button id="clearCorpusSearch" type="button">Nullstill</button>
+          </div>
           <ul id="corpusList" class="doc-list"></ul>
         </div>
         <div class="list-panel">
           <div class="row" style="justify-content:space-between; align-items:center;">
             <strong>Dokumentlenker</strong>
             <span class="muted mono" id="linksMeta">velg et dokument</span>
+          </div>
+          <div class="toolbar">
+            <button id="loadCaseLinks" type="button">Vis alle lenker i caset</button>
+            <button id="clearLinksView" type="button">Tøm</button>
           </div>
           <ul id="linksList" class="doc-list"></ul>
         </div>
@@ -150,13 +161,19 @@
   const refreshCorpusBtn = $("refreshCorpus");
   const corpusMetaEl = $("corpusMeta");
   const corpusListEl = $("corpusList");
+  const corpusSearchEl = $("corpusSearch");
+  const searchCorpusBtn = $("searchCorpus");
+  const clearCorpusSearchBtn = $("clearCorpusSearch");
   const linksMetaEl = $("linksMeta");
   const linksListEl = $("linksList");
+  const loadCaseLinksBtn = $("loadCaseLinks");
+  const clearLinksViewBtn = $("clearLinksView");
 
   let aborter = null;
   let caseMap = new Map();
   let currentCorpusItems = [];
   let selectedCorpusDocId = null;
+  let currentCorpusQuery = "";
 
   function setStatus(text) {
     statusEl.textContent = text;
@@ -455,6 +472,14 @@
     });
   }
 
+  function corpusQueryString() {
+    const params = new URLSearchParams();
+    params.set("limit", "25");
+    const value = String(currentCorpusQuery || "").trim();
+    if (value) params.set("q", value);
+    return params.toString();
+  }
+
   async function loadCases() {
     try {
       const res = await fetch("/v1/cases");
@@ -475,11 +500,12 @@
     browseMetaEl.textContent = "Laster korpus for valgt case.";
 
     try {
-      const res = await fetch(`/v1/cases/${encodeURIComponent(caseIdEl.value)}/corpus?limit=25`);
+      const res = await fetch(`/v1/cases/${encodeURIComponent(caseIdEl.value)}/corpus?${corpusQueryString()}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const payload = await res.json();
       currentCorpusItems = Array.isArray(payload.items) ? payload.items : [];
-      corpusMetaEl.textContent = `${payload.total || currentCorpusItems.length} dokumenter · viser ${currentCorpusItems.length}`;
+      const querySuffix = currentCorpusQuery ? ` · filter=${currentCorpusQuery}` : "";
+      corpusMetaEl.textContent = `${payload.total || currentCorpusItems.length} dokumenter · viser ${currentCorpusItems.length}${querySuffix}`;
       browseMetaEl.textContent = "Bla i dokumenter for valgt case og følg lenker mellom kildene.";
       renderCorpusList();
     } catch (err) {
@@ -504,6 +530,25 @@
     } catch (err) {
       linksMetaEl.textContent = `${docId} · feil`;
       linksListEl.innerHTML = `<li class="empty-state">Kunne ikke laste lenker: ${escapeHtml(err?.message || String(err))}</li>`;
+    }
+  }
+
+  async function loadCaseLinks() {
+    if (!caseIdEl.value) return;
+    selectedCorpusDocId = null;
+    renderCorpusList();
+    linksMetaEl.textContent = `${caseIdEl.value} · laster alle lenker…`;
+    linksListEl.innerHTML = "";
+
+    try {
+      const res = await fetch(`/v1/cases/${encodeURIComponent(caseIdEl.value)}/links?limit_docs=300`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const payload = await res.json();
+      const items = Array.isArray(payload.items) ? payload.items : [];
+      renderLinkList(items, `${caseIdEl.value} (case)`, payload.edge_count || items.length);
+    } catch (err) {
+      linksMetaEl.textContent = `${caseIdEl.value} · feil`;
+      linksListEl.innerHTML = `<li class="empty-state">Kunne ikke laste case-lenker: ${escapeHtml(err?.message || String(err))}</li>`;
     }
   }
 
@@ -668,6 +713,8 @@
   });
 
   caseIdEl.addEventListener("change", () => {
+    currentCorpusQuery = "";
+    corpusSearchEl.value = "";
     renderCaseMeta();
     renderQuickActions();
     renderQueryHint();
@@ -676,6 +723,36 @@
 
   refreshCorpusBtn.addEventListener("click", () => {
     loadCorpus();
+  });
+
+  searchCorpusBtn.addEventListener("click", () => {
+    currentCorpusQuery = corpusSearchEl.value.trim();
+    loadCorpus();
+  });
+
+  clearCorpusSearchBtn.addEventListener("click", () => {
+    corpusSearchEl.value = "";
+    currentCorpusQuery = "";
+    loadCorpus();
+  });
+
+  corpusSearchEl.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") {
+      ev.preventDefault();
+      currentCorpusQuery = corpusSearchEl.value.trim();
+      loadCorpus();
+    }
+  });
+
+  loadCaseLinksBtn.addEventListener("click", () => {
+    loadCaseLinks();
+  });
+
+  clearLinksViewBtn.addEventListener("click", () => {
+    selectedCorpusDocId = null;
+    linksMetaEl.textContent = "velg et dokument";
+    linksListEl.innerHTML = "";
+    renderCorpusList();
   });
 
   loadCases();
