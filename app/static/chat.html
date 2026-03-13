@@ -145,6 +145,11 @@
           </div>
           <div class="toolbar">
             <button id="loadCaseLinks" type="button">Vis alle lenker i caset</button>
+            <select id="linkSort">
+              <option value="title">Sorter: mål</option>
+              <option value="type">Sorter: type</option>
+              <option value="doc_id">Sorter: doc_id / href</option>
+            </select>
             <button id="clearLinksView" type="button">Tøm</button>
           </div>
           <div class="filter-group">
@@ -190,6 +195,7 @@
   const linksMetaEl = $("linksMeta");
   const linksListEl = $("linksList");
   const loadCaseLinksBtn = $("loadCaseLinks");
+  const linkSortEl = $("linkSort");
   const clearLinksViewBtn = $("clearLinksView");
   const linkFilterAllBtn = $("linkFilterAll");
   const linkFilterInternalBtn = $("linkFilterInternal");
@@ -208,6 +214,7 @@
   let currentLinkItems = [];
   let currentLinkContextLabel = "velg et dokument";
   let currentLinkFilter = "all";
+  let currentLinkSort = "title";
 
   function setStatus(text) {
     statusEl.textContent = text;
@@ -512,8 +519,37 @@
     return currentLinkItems.filter((edge) => edge.target_type === currentLinkFilter);
   }
 
+  function sortLinkItems(items) {
+    const typeValue = (edge) => String(edge.target_type || "").toLowerCase();
+    const titleValue = (edge) => String(edge.target_title || edge.target_doc_id || edge.target_href || "").toLowerCase();
+    const idValue = (edge) => String(edge.target_doc_id || edge.target_href || "").toLowerCase();
+    const sorted = [...items];
+    sorted.sort((a, b) => {
+      if (currentLinkSort === "type") {
+        return (
+          typeValue(a).localeCompare(typeValue(b))
+          || titleValue(a).localeCompare(titleValue(b))
+          || idValue(a).localeCompare(idValue(b))
+        );
+      }
+      if (currentLinkSort === "doc_id") {
+        return (
+          idValue(a).localeCompare(idValue(b))
+          || titleValue(a).localeCompare(titleValue(b))
+          || typeValue(a).localeCompare(typeValue(b))
+        );
+      }
+      return (
+        titleValue(a).localeCompare(titleValue(b))
+        || typeValue(a).localeCompare(typeValue(b))
+        || idValue(a).localeCompare(idValue(b))
+      );
+    });
+    return sorted;
+  }
+
   function renderLinkList() {
-    const edges = filteredLinkItems();
+    const edges = sortLinkItems(filteredLinkItems());
     linksListEl.innerHTML = "";
     const totalEdges = currentLinkItems.length;
     const shownEdges = edges.length;
@@ -920,6 +956,11 @@
 
   linkFilterUnresolvedBtn.addEventListener("click", () => {
     currentLinkFilter = "unresolved";
+    renderLinkList();
+  });
+
+  linkSortEl.addEventListener("change", () => {
+    currentLinkSort = linkSortEl.value || "title";
     renderLinkList();
   });
 
