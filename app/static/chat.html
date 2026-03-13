@@ -46,6 +46,9 @@
     .toolbar { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:10px; }
     .toolbar input { flex:1 1 220px; min-width:180px; padding:8px 10px; font-size:14px; }
     .pager { display:flex; gap:8px; align-items:center; justify-content:space-between; margin-top:10px; }
+    .filter-group { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+    .filter-chip { padding:6px 10px; font-size:13px; background:#fff; border:1px solid #ddd; border-radius:999px; }
+    .filter-chip.active { background:#163963; color:#fff; border-color:#163963; }
   </style>
 </head>
 <body>
@@ -138,6 +141,12 @@
             <button id="loadCaseLinks" type="button">Vis alle lenker i caset</button>
             <button id="clearLinksView" type="button">Tøm</button>
           </div>
+          <div class="filter-group">
+            <button id="linkFilterAll" type="button" class="filter-chip active">Alle</button>
+            <button id="linkFilterInternal" type="button" class="filter-chip">Internal</button>
+            <button id="linkFilterExternal" type="button" class="filter-chip">External</button>
+            <button id="linkFilterUnresolved" type="button" class="filter-chip">Unresolved</button>
+          </div>
           <ul id="linksList" class="doc-list"></ul>
         </div>
       </div>
@@ -175,6 +184,10 @@
   const linksListEl = $("linksList");
   const loadCaseLinksBtn = $("loadCaseLinks");
   const clearLinksViewBtn = $("clearLinksView");
+  const linkFilterAllBtn = $("linkFilterAll");
+  const linkFilterInternalBtn = $("linkFilterInternal");
+  const linkFilterExternalBtn = $("linkFilterExternal");
+  const linkFilterUnresolvedBtn = $("linkFilterUnresolved");
 
   const CORPUS_PAGE_SIZE = 25;
   let aborter = null;
@@ -184,6 +197,9 @@
   let currentCorpusQuery = "";
   let currentCorpusTotal = 0;
   let currentCorpusOffset = 0;
+  let currentLinkItems = [];
+  let currentLinkContextLabel = "velg et dokument";
+  let currentLinkFilter = "all";
 
   function setStatus(text) {
     statusEl.textContent = text;
@@ -209,6 +225,9 @@
     selectedCorpusDocId = null;
     currentCorpusTotal = 0;
     currentCorpusOffset = 0;
+    currentLinkItems = [];
+    currentLinkContextLabel = "velg et dokument";
+    currentLinkFilter = "all";
     corpusListEl.innerHTML = "";
     linksListEl.innerHTML = "";
     corpusMetaEl.textContent = "0 dokumenter";
@@ -217,6 +236,7 @@
     loadMoreCorpusBtn.classList.add("hidden");
     loadMoreCorpusBtn.disabled = false;
     loadMoreCorpusBtn.textContent = "Vis flere";
+    renderLinkFilterState();
   }
 
   function escapeHtml(s) {
@@ -434,11 +454,34 @@
     });
   }
 
-  function renderLinkList(edges, docId, edgeCount) {
-    linksListEl.innerHTML = "";
-    linksMetaEl.textContent = `${docId} · ${edgeCount} lenker`;
+  function renderLinkFilterState() {
+    const entries = [
+      [linkFilterAllBtn, "all"],
+      [linkFilterInternalBtn, "internal"],
+      [linkFilterExternalBtn, "external"],
+      [linkFilterUnresolvedBtn, "unresolved"],
+    ];
+    entries.forEach(([btn, value]) => {
+      if (!btn) return;
+      btn.classList.toggle("active", currentLinkFilter === value);
+    });
+  }
 
-    if (!edges.length) {
+  function filteredLinkItems() {
+    if (currentLinkFilter === "all") return currentLinkItems;
+    return currentLinkItems.filter((edge) => edge.target_type === currentLinkFilter);
+  }
+
+  function renderLinkList() {
+    const edges = filteredLinkItems();
+    linksListEl.innerHTML = "";
+    const totalEdges = currentLinkItems.length;
+    const shownEdges = edges.length;
+    const countLabel = currentLinkFilter === "all" ? `${shownEdges}` : `${shownEdges} av ${totalEdges}`;
+    linksMetaEl.textContent = `${currentLinkContextLabel} · ${countLabel} lenker`;
+    renderLinkFilterState();
+
+    if (!shownEdges) {
       linksListEl.innerHTML = '<li class="empty-state">Ingen lenker registrert for dette dokumentet.</li>';
       return;
     }
@@ -486,6 +529,12 @@
 
       linksListEl.appendChild(li);
     });
+  }
+
+  function setLinkItems(items, contextLabel) {
+    currentLinkItems = Array.isArray(items) ? items : [];
+    currentLinkContextLabel = contextLabel || "lenker";
+    renderLinkList();
   }
 
   function corpusQueryString() {
@@ -569,9 +618,10 @@
       const res = await fetch(`/v1/cases/${encodeURIComponent(caseIdEl.value)}/documents/${encodeURIComponent(docId)}/links`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const payload = await res.json();
-      const items = Array.isArray(payload.items) ? payload.items : [];
-      renderLinkList(items, docId, payload.edge_count || items.length);
+      setLinkItems(payload.items, docId);
     } catch (err) {
+      currentLinkItems = [];
+      currentLinkContextLabel = docId;
       linksMetaEl.textContent = `${docId} · feil`;
       linksListEl.innerHTML = `<li class="empty-state">Kunne ikke laste lenker: ${escapeHtml(err?.message || String(err))}</li>`;
     }
@@ -588,9 +638,10 @@
       const res = await fetch(`/v1/cases/${encodeURIComponent(caseIdEl.value)}/links?limit_docs=300`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const payload = await res.json();
-      const items = Array.isArray(payload.items) ? payload.items : [];
-      renderLinkList(items, `${caseIdEl.value} (case)`, payload.edge_count || items.length);
+      setLinkItems(payload.items, `${caseIdEl.value} (case)`);
     } catch (err) {
+      currentLinkItems = [];
+      currentLinkContextLabel = `${caseIdEl.value} (case)`;
       linksMetaEl.textContent = `${caseIdEl.value} · feil`;
       linksListEl.innerHTML = `<li class="empty-state">Kunne ikke laste case-lenker: ${escapeHtml(err?.message || String(err))}</li>`;
     }
@@ -798,9 +849,33 @@
 
   clearLinksViewBtn.addEventListener("click", () => {
     selectedCorpusDocId = null;
+    currentLinkItems = [];
+    currentLinkContextLabel = "velg et dokument";
+    currentLinkFilter = "all";
     linksMetaEl.textContent = "velg et dokument";
     linksListEl.innerHTML = "";
+    renderLinkFilterState();
     renderCorpusList();
+  });
+
+  linkFilterAllBtn.addEventListener("click", () => {
+    currentLinkFilter = "all";
+    renderLinkList();
+  });
+
+  linkFilterInternalBtn.addEventListener("click", () => {
+    currentLinkFilter = "internal";
+    renderLinkList();
+  });
+
+  linkFilterExternalBtn.addEventListener("click", () => {
+    currentLinkFilter = "external";
+    renderLinkList();
+  });
+
+  linkFilterUnresolvedBtn.addEventListener("click", () => {
+    currentLinkFilter = "unresolved";
+    renderLinkList();
   });
 
   loadCases();
