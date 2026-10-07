@@ -56,6 +56,42 @@ rag_service_requires_redeploy() {
   return 1
 }
 
+# The repos under /srv/ops/repos are read-only mirrors that documentation is
+# exported from. `git pull --ff-only` stops working the day upstream history is
+# rewritten or the mirror sits on a detached HEAD; that happened 2026-05-05 and
+# the documentation RAG served five-month-old docs until 2026-10-08, while each
+# source still reported "ok". A mirror therefore follows origin: fast-forward
+# when possible, otherwise keep the old tip under a tag and move to origin.
+# A mirror with local modifications is left alone and counted as a failure.
+update_mirror() {
+  local repo="$1" branch target
+  branch="$(git -C "$repo" symbolic-ref -q --short refs/remotes/origin/HEAD 2>/dev/null | sed 's#^origin/##')"
+  if [ -z "$branch" ]; then
+    branch="$(git -C "$repo" symbolic-ref -q --short HEAD 2>/dev/null || true)"
+  fi
+  if [ -z "$branch" ]; then
+    if git -C "$repo" rev-parse -q --verify origin/main >/dev/null; then branch=main; else branch=master; fi
+  fi
+  target="origin/$branch"
+  git -C "$repo" rev-parse -q --verify "$target" >/dev/null || { echo "no $target in $repo" >&2; return 1; }
+  if ! git -C "$repo" diff --quiet || ! git -C "$repo" diff --cached --quiet; then
+    echo "mirror $repo has local modifications; not touching it" >&2
+    return 1
+  fi
+  if [ "$(git -C "$repo" rev-parse HEAD)" = "$(git -C "$repo" rev-parse "$target")" ] \
+     && [ "$(git -C "$repo" symbolic-ref -q --short HEAD 2>/dev/null)" = "$branch" ]; then
+    return 0
+  fi
+  if git -C "$repo" merge-base --is-ancestor HEAD "$target"; then
+    git -C "$repo" checkout -q -B "$branch" "$target"
+    return $?
+  fi
+  local tag="mirror-before-reset-$(date -u +%Y%m%dT%H%M%SZ)"
+  git -C "$repo" tag "$tag" HEAD || return 1
+  echo "mirror $repo diverged from $target; old tip kept as tag $tag"
+  git -C "$repo" checkout -q -B "$branch" "$target"
+}
+
 for repo in /srv/ops/repos/*; do
   [ -d "$repo/.git" ] || continue
   repo_name="$(basename "$repo")"
@@ -66,8 +102,8 @@ for repo in /srv/ops/repos/*; do
     repo_failures=$((repo_failures + 1))
     continue
   fi
-  if ! git -C "$repo" pull --ff-only; then
-    echo "git pull failed for $repo" >&2
+  if ! update_mirror "$repo"; then
+    echo "mirror update failed for $repo" >&2
     repo_failures=$((repo_failures + 1))
     continue
   fi
