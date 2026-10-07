@@ -4,14 +4,21 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import text
 
-from app.api.case_browse import CorpusResponse, LinkGraphResponse, _build_link_graph, _corpus_rows
-from app.models.schemas import ChatRequest, ChatResponse, QueryRequest, QueryResponse
+from app.api.case_browse import (
+    CaseStatusResponse,
+    CorpusResponse,
+    LinkGraphResponse,
+    _build_link_graph,
+    _case_status,
+    _corpus_rows,
+)
+from app.models.schemas import ChatRequest, ChatResponse, QueryRequest, QueryResponse, RetrieveRequest, RetrieveResponse
 from app.rag.cases.guidance import case_guidance, query_case_guidance
 from app.rag.cases.loader import case_by_id, load_rag_cases
 from app.rag.cases.visibility import visible_case_ids, visible_cases
 from app.rag.generate.llm_provider import ModelProfileError, validate_model_profile
 from app.rag.index.db import engine
-from app.rag.pipeline import answer_question, answer_question_stream
+from app.rag.pipeline import answer_question, answer_question_stream, retrieve_context
 from app.settings import settings
 
 router = APIRouter()
@@ -114,6 +121,21 @@ def _run_query(req: QueryRequest):
     return response
 
 
+def _run_retrieve(req: RetrieveRequest):
+    validate_model_profile(req.model_profile)
+    _validate_case_visibility(req.case_id, req.prompt_profile_case_id)
+    return retrieve_context(
+        message=req.query,
+        conversation_id=req.conversation_id,
+        filters=_filters_with_case(req.filters, req.case_id),
+        top_k=req.top_k,
+        model_profile=req.model_profile,
+        prompt_profile_case_id=req.prompt_profile_case_id,
+        rewrite_query=req.rewrite_query,
+        max_context_chars=req.max_context_chars,
+    )
+
+
 @router.get("/v1/cases")
 def list_cases():
     cfg = load_rag_cases(settings.rag_cases_path)
@@ -144,6 +166,35 @@ def public_case_corpus(
     return CorpusResponse(case_id=case_id, total=total, limit=limit, offset=offset, items=rows)
 
 
+@router.get("/v1/cases/{case_id}/status", response_model=CaseStatusResponse)
+def public_case_status(case_id: str):
+    _validate_case_visibility(case_id, None)
+    return _case_status(case_id)
+
+
+@router.post("/v1/cases/{case_id}/retrieve", response_model=RetrieveResponse)
+def public_case_retrieve(case_id: str, req: RetrieveRequest):
+    try:
+        retrieve_req = RetrieveRequest(
+            query=req.query,
+            conversation_id=req.conversation_id,
+            case_id=case_id,
+            filters=req.filters or {},
+            top_k=req.top_k,
+            model_profile=req.model_profile,
+            prompt_profile_case_id=req.prompt_profile_case_id,
+            rewrite_query=req.rewrite_query,
+            max_context_chars=req.max_context_chars,
+        )
+        return _run_retrieve(retrieve_req)
+    except ModelProfileError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/v1/cases/{case_id}/links", response_model=LinkGraphResponse)
 def public_case_links(
     case_id: str,
@@ -172,6 +223,18 @@ def query(req: QueryRequest):
             retrieval_debug=resp.retrieval_debug,
             trace=trace,
         )
+    except ModelProfileError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/v1/retrieve", response_model=RetrieveResponse)
+def retrieve(req: RetrieveRequest):
+    try:
+        return _run_retrieve(req)
     except ModelProfileError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except HTTPException:

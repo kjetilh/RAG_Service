@@ -145,7 +145,13 @@ curl -X POST http://127.0.0.1:8102/v1/admin/ingest \
 Anbefalt `source_type`-standard:
 
 - Innovasjon: `innovasjonsledelse`, `innovasjonsfag`
-- Dokumentasjon (`doc`): `haven_docs`, `cellprotocol_docs`
+- DiMy offentlig/bred dokumentasjon: `haven_docs`, `cellprotocol_docs`
+- DiMy privat utviklerdokumentasjon: `cellscaffold_internal_docs`, `dimy_private_dev_docs`
+
+Ikke bland privat `CellScaffold`-/DiMy-materiale inn i en bred `haven_docs`
+source type med mindre hele instansen er privat og nedlastingstilgang er
+låst ned. Private DiMy source types skal bare brukes sammen med en intern
+instans, research-token-scope eller cell access control.
 
 ### 6.1 Kontinuerlig synk (nye/endrede/slettede filer)
 

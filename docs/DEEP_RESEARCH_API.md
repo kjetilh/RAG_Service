@@ -161,7 +161,7 @@ Anbefalt target-arkitektur er a holde dokumentasjon og prompts som separate case
 Status i dette repoet akkurat na:
 
 - `config/rag_cases.yml` definerer `dimy_docs` og `dimy_prompts` pa `doc`-siden
-- `dimy_docs` er utvikler- og kodeassistentcaset for `CellProtocol`, implementerte celler, API-er og teknisk dokumentasjon
+- `dimy_docs` er utvikler- og kodeassistentcaset for `CellProtocol`, kuraterte interne `CellScaffold`-dokumenter, implementerte celler, API-er, drift og teknisk dokumentasjon
 - `dimy_prompts` er brukerrettet caset for cellesammensetning, arbeidsrom, byggesteiner og dokumenterte oppskrifter
 
 Det betyr at research-klienter pa `doc.haven.digipomps.org` bor velge case eksplisitt ut fra sporsmalstype:
@@ -171,6 +171,8 @@ Det betyr at research-klienter pa `doc.haven.digipomps.org` bor velge case ekspl
    - arkitektur
    - driftsdokumentasjon
    - API-er, kontrakter og runtime-adferd
+   - kuraterte interne `CellScaffold`-docs
+   - DiMy/RAG operator-policy og private utviklernotater
 2. `dimy_prompts`
    - arbeidsrom
    - cellesammensetning

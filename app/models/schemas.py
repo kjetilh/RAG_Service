@@ -20,6 +20,18 @@ class QueryRequest(BaseModel):
     model_profile: Optional[str] = Field(default=None, min_length=1, max_length=64)
     prompt_profile_case_id: Optional[str] = Field(default=None, min_length=1, max_length=80)
 
+
+class RetrieveRequest(BaseModel):
+    query: str = Field(..., min_length=1)
+    conversation_id: Optional[str] = None
+    case_id: Optional[str] = Field(default=None, min_length=1, max_length=80)
+    filters: Optional[Dict[str, Any]] = None
+    top_k: Optional[int] = None
+    model_profile: Optional[str] = Field(default=None, min_length=1, max_length=64)
+    prompt_profile_case_id: Optional[str] = Field(default=None, min_length=1, max_length=80)
+    rewrite_query: Optional[bool] = None
+    max_context_chars: Optional[int] = Field(default=None, ge=1, le=200000)
+
 class Citation(BaseModel):
     doc_id: str
     title: str
@@ -43,6 +55,13 @@ class ChatResponse(BaseModel):
 
 class QueryResponse(BaseModel):
     answer: str
+    citations: List[Citation]
+    retrieval_debug: Optional[Dict[str, Any]] = None
+    trace: Optional[Dict[str, Any]] = None
+
+
+class RetrieveResponse(BaseModel):
+    context_text: str
     citations: List[Citation]
     retrieval_debug: Optional[Dict[str, Any]] = None
     trace: Optional[Dict[str, Any]] = None

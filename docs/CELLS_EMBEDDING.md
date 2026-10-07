@@ -43,6 +43,10 @@ X-Cell-User-Id: <bruker-id>
   - lenkegraf mellom dokumenter (internal/external/unresolved)
 - `GET /v1/cell/cases/{case_id}/documents/{doc_id}/links`
   - lenker for ett dokument
+- `POST /v1/cell/cases/{case_id}/interviews/collective-summary`
+  - aggregerer svar per fast spørsmål (spørsmål fra fil eller inline payload)
+- `POST /v1/cell/cases/{case_id}/contract-verification`
+  - ingesterer `ContractProbeVerificationRecord`-chunks som søkbare dokumenter i valgt case
 - `GET /v1/cell/cases/{case_id}/members`
   - list medlemmer (`admin`+)
 - `PUT /v1/cell/cases/{case_id}/members/{user_id}`
@@ -71,6 +75,10 @@ X-Cell-User-Id: <bruker-id>
 5. `RAGCaseMembersAdminCell`
    - kaller members-endepunktene
    - kun tilgjengelig for owner/admin
+
+6. `RAGContractVerificationIngestCell`
+   - kaller `POST /v1/cell/cases/{case_id}/contract-verification`
+   - brukes av `ContractProbeCell`/CI for å publisere verifiserte kontraktchunks til docs-RAG
 
 ## Drift
 

@@ -3,9 +3,16 @@ import secrets
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.rag.admin_publish import (
+    catalog_status,
+    media_status,
+    publish_catalog,
+    publish_media,
+    reindex_catalog,
+)
 from app.rag.audit.coverage_report import build_coverage_actions, build_coverage_report
 from app.rag.cases.loader import case_by_id, load_rag_cases
 from app.rag.cases.visibility import visible_case_ids, visible_cases
@@ -97,6 +104,40 @@ class SyncRequest(BaseModel):
     anti_thrash_batch_size: int | None = None
 
 
+class CatalogChunkRequest(BaseModel):
+    chunk_id: str | None = None
+    id: str | None = None
+    title: str | None = None
+    content: str | None = None
+    body: str | None = None
+    metadata: dict | None = None
+
+
+class CatalogPublishRequest(BaseModel):
+    case_id: str
+    source_repo: str
+    source_commit: str | None = None
+    source_type: str
+    replace_source: bool = True
+    dry_run: bool = False
+    chunks: list[CatalogChunkRequest] = Field(default_factory=list)
+
+
+class CatalogSourceRequest(BaseModel):
+    case_id: str
+    source_repo: str | None = None
+    source_type: str | None = None
+
+
+class MediaPublishRequest(BaseModel):
+    case_id: str
+    source_type: str
+    source_repo: str | None = None
+    source_commit: str | None = None
+    metadata: dict | None = None
+    media: dict
+
+
 @router.post("/v1/admin/sync", dependencies=[Depends(_require_admin_api_key)])
 def admin_sync(req: SyncRequest):
     if req.delete_missing and req.source_type is None:
@@ -113,6 +154,54 @@ def admin_sync(req: SyncRequest):
         anti_thrash_batch_size=req.anti_thrash_batch_size,
     )
     return {"ok": len(summary.get("errors", [])) == 0, "summary": summary}
+
+
+@router.post("/v1/admin/catalog/publish", dependencies=[Depends(_require_admin_api_key)])
+def admin_catalog_publish(req: CatalogPublishRequest):
+    try:
+        return publish_catalog(req.model_dump())
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/v1/admin/catalog/reindex", dependencies=[Depends(_require_admin_api_key)])
+def admin_catalog_reindex(req: CatalogSourceRequest):
+    try:
+        return reindex_catalog(
+            case_id=req.case_id,
+            source_repo=req.source_repo,
+            source_type=req.source_type,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/v1/admin/catalog/status", dependencies=[Depends(_require_admin_api_key)])
+def admin_catalog_status(case_id: str, source_repo: str | None = None, source_type: str | None = None):
+    try:
+        return catalog_status(case_id=case_id, source_repo=source_repo, source_type=source_type)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/v1/admin/media/publish", dependencies=[Depends(_require_admin_api_key)])
+def admin_media_publish(req: MediaPublishRequest):
+    try:
+        return publish_media(req.model_dump())
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/v1/admin/media/status", dependencies=[Depends(_require_admin_api_key)])
+def admin_media_status(case_id: str, source_repo: str | None = None, source_type: str | None = None):
+    try:
+        return media_status(case_id=case_id, source_repo=source_repo, source_type=source_type)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/v1/admin/coverage-report", dependencies=[Depends(_require_admin_api_key)])

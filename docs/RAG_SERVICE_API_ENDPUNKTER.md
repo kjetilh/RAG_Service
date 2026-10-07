@@ -47,6 +47,45 @@ Disse endepunktene er vanlige query/chat-endepunkter.
 - Returnerer `answer`, `citations`, `retrieval_debug` og `trace`
 - Definert i `app/api/routes_chat.py`
 
+### `POST /v1/retrieve`
+
+- Request: `RetrieveRequest`
+- Respons: `RetrieveResponse`
+- Returnerer pakket `context_text`, `citations`, `retrieval_debug` og `trace` uten å generere slutt-svar
+- `rewrite_query` er av med mindre requesten eksplisitt setter den til `true`
+- Definert i `app/api/routes_chat.py`
+
+### `GET /v1/cases`
+
+- Lister synlige RAG-cases for instansen
+- Definert i `app/api/routes_chat.py`
+
+### `GET /v1/cases/{case_id}/status`
+
+- Returnerer corpusstatus for ett case: dokumenter, aktive/tombstone-dokumenter, chunks, manglende source types, schema-warnings og runtime-modellinfo
+- Definert i `app/api/routes_chat.py`
+
+### `POST /v1/cases/{case_id}/retrieve`
+
+- Case-låst variant av `POST /v1/retrieve`
+- Praktisk for Copilot/agentbruk og små lokale modeller som trenger kontekst + citations uten generering
+- Definert i `app/api/routes_chat.py`
+
+### `GET /v1/cases/{case_id}/corpus`
+
+- Lister corpus for ett case
+- Definert i `app/api/routes_chat.py`
+
+### `GET /v1/cases/{case_id}/links`
+
+- Returnerer linkgraph for et case
+- Definert i `app/api/routes_chat.py`
+
+### `GET /v1/cases/{case_id}/documents/{doc_id}/links`
+
+- Returnerer linkgraph for ett dokument
+- Definert i `app/api/routes_chat.py`
+
 ### `POST /v1/chat`
 
 - Request: `ChatRequest`
@@ -85,6 +124,33 @@ Disse endepunktene krever `X-API-Key`.
 - Synkroniserer live-mapper mot dokumenttabellen
 - Stotter `delete_missing`, `dry_run`, `tombstone_mode`, `tombstone_grace_seconds` og `anti_thrash_batch_size`
 - Definert i `app/api/routes_admin.py`
+
+### `POST /v1/admin/catalog/publish`
+
+- Publiserer katalog-chunks fra CellScaffold/CellProtocol inn i RAG-indeksen
+- Støtter `dry_run` og `replace_source`
+- Definert i `app/api/routes_admin.py` og `app/rag/admin_publish.py`
+
+### `POST /v1/admin/catalog/reindex`
+
+- Reindekserer embeddings for publiserte katalogdokumenter
+- Definert i `app/api/routes_admin.py` og `app/rag/admin_publish.py`
+
+### `GET /v1/admin/catalog/status`
+
+- Returnerer antall publiserte katalogdokumenter/chunks for valgt `case_id`, eventuelt filtrert på `source_repo` og `source_type`
+- Definert i `app/api/routes_admin.py` og `app/rag/admin_publish.py`
+
+### `POST /v1/admin/media/publish`
+
+- Publiserer media-metadata eller tekstlig media-innhold inn i RAG-indeksen
+- Tekst eller dekodbar `inlineBase64` for tekstlige MIME-typer indekseres som søkbart innhold
+- Definert i `app/api/routes_admin.py` og `app/rag/admin_publish.py`
+
+### `GET /v1/admin/media/status`
+
+- Returnerer antall publiserte media-dokumenter/chunks for valgt `case_id`, eventuelt filtrert på `source_repo` og `source_type`
+- Definert i `app/api/routes_admin.py` og `app/rag/admin_publish.py`
 
 ### `GET /v1/admin/coverage-report`
 
@@ -125,9 +191,25 @@ Autentisering:
 - Kjører query innenfor ett case
 - Definert i `app/api/routes_cell.py`
 
+### `POST /v1/cell/cases/{case_id}/retrieve`
+
+- Returnerer pakket kontekst + citations innenfor ett tvunget case, uten generering
+- Definert i `app/api/routes_cell.py`
+
+### `GET /v1/cell/cases/{case_id}/status`
+
+- Returnerer corpusstatus for ett case via cell-gateway-auth
+- Definert i `app/api/routes_cell.py`
+
 ### `POST /v1/cell/cases/{case_id}/interviews/collective-summary`
 
 - Kjører kollektiv intervjuanalyse innenfor ett case
+- Definert i `app/api/routes_cell.py`
+
+### `POST /v1/cell/cases/{case_id}/contract-verification`
+
+- Ingest av `ContractProbeVerificationRecord`/RAG-chunks for ett case
+- Krever `admin`-rolle for caset
 - Definert i `app/api/routes_cell.py`
 
 ### `GET /v1/cell/cases/{case_id}/corpus`
@@ -189,6 +271,17 @@ Autentisering:
 - Kjører read-only query mot et valgt case
 - Definert i `app/api/routes_research.py`
 
+### `POST /v1/research/retrieve`
+
+- Read-only retrieval/context-endepunkt for research-klienter, Copilot og små lokale modeller
+- Returnerer `context_text`, `citations`, `retrieval_debug` og `trace`
+- Definert i `app/api/routes_research.py`
+
+### `GET /v1/research/cases/{case_id}/status`
+
+- Returnerer corpusstatus for ett token-tilgjengelig case
+- Definert i `app/api/routes_research.py`
+
 ### `GET /v1/research/cases/{case_id}/corpus`
 
 - Lister dokumenter i corpus for et case
@@ -220,6 +313,7 @@ Autentisering:
 ## Viktig avgrensing
 
 - `chat` og `query` er ikke det samme som `research`
+- `retrieve` er retrieval-only og returnerer kontekst; `query`/`chat` genererer svar
 - `research` er read-only og skal ikke brukes for ingest, sync eller admin-operasjoner
 - `cell` er ikke det samme som `research`; cell-endepunktene har egen gateway-auth og medlemskapsmodell
 - eldre filnedlasting finnes fortsatt som `GET /v1/documents/{doc_id}/download`, mens ny research-bruk bor bruke `GET /v1/research/documents/{doc_id}/download`

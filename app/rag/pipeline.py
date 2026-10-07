@@ -8,7 +8,7 @@ from threading import Semaphore
 from sqlalchemy import text
 
 from app.settings import settings
-from app.models.schemas import ChatResponse, Citation
+from app.models.schemas import ChatResponse, Citation, RetrieveResponse
 from app.rag.index.db import engine
 from app.rag.index.embedder import default_embedder
 from app.rag.retrieve.hybrid import RetrievedChunk, hybrid_retrieve
@@ -1434,6 +1434,79 @@ def answer_question(
             _detail_instruction(plan),
         ),
         rewrite_query=plan.answer_mode.rewrite_query if plan.answer_mode else None,
+    )
+
+
+def retrieve_context(
+    message: str,
+    conversation_id: Optional[str] = None,
+    filters: Optional[Dict[str, Any]] = None,
+    top_k: Optional[int] = None,
+    model_profile: Optional[str] = None,
+    prompt_profile_case_id: Optional[str] = None,
+    rewrite_query: Optional[bool] = None,
+    max_context_chars: Optional[int] = None,
+) -> RetrieveResponse:
+    del conversation_id  # Reserved for future conversation-aware retrieval.
+    filters = filters or {}
+    plan = plan_query(message, filters)
+    effective_filters = dict(plan.filters)
+    effective_top_k = _effective_top_k(top_k, plan.retrieval)
+    retrieval_message = _retrieval_message(message, plan)
+
+    # Retrieval-only is intentionally conservative by default: it should not
+    # require an LLM call unless a client explicitly opts into query rewrite.
+    candidates, effective_query = _retrieve_candidates(
+        query=retrieval_message,
+        filters=effective_filters,
+        retrieval=plan.retrieval,
+        model_profile=model_profile,
+        rewrite_query=bool(rewrite_query),
+        effective_top_k=effective_top_k,
+    )
+    packed = pack_context(
+        candidates,
+        effective_top_k,
+        max_chunks_per_doc=int(plan.retrieval.get("max_chunks_per_doc", settings.max_chunks_per_doc)),
+    )
+    if packed.debug is None:
+        packed.debug = {}
+
+    prompt_case_id = _prompt_case_id(plan, prompt_profile_case_id)
+    prompt_system_path, prompt_answer_path, prompt_system_source, prompt_answer_source = resolve_effective_paths(
+        case_id=prompt_case_id
+    )
+    packed.debug["query_plan"] = _build_query_plan(
+        plan=plan,
+        prompt_profile_case_id=prompt_profile_case_id,
+        prompt_case_id=prompt_case_id,
+        prompt_system_path=prompt_system_path,
+        prompt_answer_path=prompt_answer_path,
+        prompt_system_source=prompt_system_source,
+        prompt_answer_source=prompt_answer_source,
+        extra_fields={
+            "retrieval_query_input": retrieval_message,
+            "effective_query": effective_query,
+            "effective_filters": effective_filters,
+            "generation_skipped": True,
+            "rewrite_query_requested": bool(rewrite_query),
+        },
+    )
+    packed.debug["evaluation_gate"] = run_evaluation_gate(packed.citations, plan.evaluation)
+
+    context_text = packed.context_text
+    if max_context_chars is not None and len(context_text) > int(max_context_chars):
+        context_text = context_text[: int(max_context_chars)]
+        packed.debug["context_truncated"] = True
+        packed.debug["max_context_chars"] = int(max_context_chars)
+    else:
+        packed.debug["context_truncated"] = False
+
+    return RetrieveResponse(
+        context_text=context_text,
+        citations=packed.citations,
+        retrieval_debug=packed.debug,
+        trace=packed.debug.get("query_plan"),
     )
 
 

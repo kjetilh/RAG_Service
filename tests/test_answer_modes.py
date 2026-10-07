@@ -143,3 +143,19 @@ def test_choose_answer_mode_uses_case_switch_contract_for_dimy_prompts_research_
     assert plan.default_prompt_case_id == "dimy_prompts"
     assert plan.answer_contract == WORKSPACE_CASE_SWITCH_CONTRACT
     assert "case_guidance" in (plan.retrieval_hint or "")
+
+
+def test_choose_answer_mode_adds_rag_gateway_hint_for_dimy_docs():
+    plan = choose_answer_mode(
+        message="Hvordan virker RAGGatewayCell i CellScaffold, og hvilke upstream-endepunkter bruker den?",
+        case_id="dimy_docs",
+        docs_source_types=["haven_docs", "cellprotocol_docs"],
+        selected_domain="docs",
+    )
+
+    assert plan.answer_mode == "rag_gateway_contract"
+    assert plan.source_strategy == "articles"
+    assert plan.rewrite_query is False
+    assert plan.default_prompt_case_id == "dimy_docs"
+    assert "RAGGatewayHTTPClient" in (plan.retrieval_hint or "")
+    assert "query.run" in (plan.retrieval_hint or "")

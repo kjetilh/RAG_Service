@@ -212,6 +212,22 @@ CASE_SWITCH_PATTERNS = [
     "dimy_prompts",
 ]
 
+RAG_GATEWAY_PATTERNS = [
+    "raggateway",
+    "raggatewaycell",
+    "rag gateway",
+    "rag-gateway",
+    "raggatewayhttpclient",
+    "cell:///raggateway",
+    "cases.list",
+    "query.run",
+    "corpus.list",
+    "links.case",
+    "links.document",
+    "upstream-endepunkt",
+    "upstream-endepunkter",
+]
+
 
 GENERAL_DIRECT_CONTRACT = """Svar direkte på spørsmålet med bare de delene som faktisk hjelper.
 Bruk korte mellomtitler bare når de gjør svaret tydeligere.
@@ -353,6 +369,13 @@ WORKSPACE_CASE_SWITCH_RETRIEVAL_HINT = (
     "post /v1/research/query retrieval_debug query_plan"
 )
 
+RAG_GATEWAY_RETRIEVAL_HINT = (
+    "RAGGatewayCell RAGGatewayHTTPClient cell:///RAGGateway "
+    "cases.list query.run corpus.list links.case links.document "
+    "interviews.collectiveSummary members catalog media "
+    "/v1/cell/cases /v1/cases /v1/research/cases"
+)
+
 
 INTERVIEW_QUESTION_SET_PATH = "config/interview_questions_innovasjonspolitikk.yml"
 
@@ -427,6 +450,24 @@ def choose_answer_mode(
             ),
             detail_level=detail_level,
             retrieval_hint=WORKSPACE_RECIPE_RETRIEVAL_HINT,
+        )
+
+    if case_id == "dimy_docs" and _contains_any(message_lc, RAG_GATEWAY_PATTERNS):
+        return AnswerModePlan(
+            answer_mode="rag_gateway_contract",
+            source_strategy="articles",
+            response_shape="direct",
+            streaming_allowed=True,
+            rewrite_query=False,
+            use_subquery_planner=False,
+            default_prompt_case_id="dimy_docs",
+            answer_contract=GENERAL_DIRECT_CONTRACT,
+            planner_focus=(
+                "Prioriter dokumenterte RAGGatewayCell-keypaths, RAGGatewayHTTPClient-metoder, "
+                "upstream-endepunkter og eksplisitte begrensninger."
+            ),
+            detail_level=detail_level,
+            retrieval_hint=RAG_GATEWAY_RETRIEVAL_HINT,
         )
 
     if _contains_any(message_lc, QUESTION_FINDINGS_PATTERNS):

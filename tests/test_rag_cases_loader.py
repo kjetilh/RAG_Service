@@ -165,6 +165,12 @@ def test_repository_case_split_keeps_dimy_docs_and_dimy_prompts_separate():
     docs_case = case_by_id(cfg, "dimy_docs")
     prompts_case = case_by_id(cfg, "dimy_prompts")
 
+    assert docs_case.planner.docs_source_types == [
+        "haven_docs",
+        "cellprotocol_docs",
+        "cellscaffold_internal_docs",
+        "dimy_private_dev_docs",
+    ]
     assert "prompt_docs" not in docs_case.planner.docs_source_types
     assert prompts_case.planner.docs_source_types == ["prompt_docs"]
     assert prompts_case.planner.prompts_source_types == []

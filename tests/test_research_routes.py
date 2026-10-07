@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from fastapi.responses import FileResponse
 
 from app.api import routes_research
-from app.models.schemas import Citation, QueryResponse
+from app.models.schemas import Citation, QueryResponse, RetrieveResponse
 from app.rag.cases.loader import PlannerConfig, RagCase, RagCasesConfig
 from app.settings import settings
 
@@ -94,6 +94,7 @@ def test_research_cases_include_guidance_for_known_doc_cases(monkeypatch):
 
 def test_research_query_rewrites_download_urls_with_signed_grant(monkeypatch):
     monkeypatch.setattr(routes_research, "_require_case_access", lambda *_args: None)
+    monkeypatch.setattr(routes_research, "_allowed_case_ids", lambda _identity: {"doc_case"})
     monkeypatch.setattr(routes_research.time, "time", lambda: 1_700_000_000)
     settings.research_download_signing_key = "signing-secret"
     settings.research_download_ttl_seconds = 120
@@ -122,6 +123,49 @@ def test_research_query_rewrites_download_urls_with_signed_grant(monkeypatch):
     )
     assert resp.trace == {"selected_case": "doc_case"}
     expected_sig = routes_research._download_signature("d1", 1_700_000_120, "doc_case")
+    assert (
+        resp.citations[0].download_url
+        == f"/v1/research/documents/d1/download?exp=1700000120&cases=doc_case&sig={expected_sig}"
+    )
+
+
+def test_research_retrieve_rewrites_download_urls_with_signed_grant(monkeypatch):
+    monkeypatch.setattr(routes_research, "_require_case_access", lambda *_args: None)
+    monkeypatch.setattr(routes_research, "_allowed_case_ids", lambda _identity: {"doc_case"})
+    monkeypatch.setattr(routes_research.time, "time", lambda: 1_700_000_000)
+    settings.research_download_signing_key = "signing-secret"
+    settings.research_download_ttl_seconds = 120
+
+    captured = {}
+
+    def _fake_retrieve_context(**kwargs):
+        captured.update(kwargs)
+        return RetrieveResponse(
+            context_text="context",
+            citations=[
+                Citation(doc_id="d1", title="Doc", chunk_id="c1", score=0.9, excerpt="x", download_url="/v1/documents/d1/download")
+            ],
+            retrieval_debug={"query_plan": {"selected_case": "doc_case"}},
+            trace=None,
+        )
+
+    monkeypatch.setattr(routes_research, "retrieve_context", _fake_retrieve_context)
+
+    resp = routes_research.research_retrieve(
+        routes_research.ResearchRetrieveRequest(
+            case_id="doc_case",
+            query="What changed?",
+            filters={"source_type": ["haven_docs"]},
+            rewrite_query=False,
+        ),
+        identity=_identity("research:read", "research:download", case_ids=["doc_case"], token="secret-token"),
+    )
+
+    expected_sig = routes_research._download_signature("d1", 1_700_000_120, "doc_case")
+    assert captured["filters"]["source_type"] == ["haven_docs"]
+    assert captured["filters"]["rag_case_id"] == "doc_case"
+    assert captured["rewrite_query"] is False
+    assert resp.context_text == "context"
     assert (
         resp.citations[0].download_url
         == f"/v1/research/documents/d1/download?exp=1700000120&cases=doc_case&sig={expected_sig}"

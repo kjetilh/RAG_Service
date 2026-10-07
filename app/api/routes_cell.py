@@ -14,7 +14,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 
 from app.api.routes_chat import _run_query
-from app.models.schemas import QueryRequest, QueryResponse
+from app.api.case_browse import CaseStatusResponse, _case_status
+from app.models.schemas import QueryRequest, QueryResponse, RetrieveRequest, RetrieveResponse
 from app.rag.interviews.collective import (
     CollectiveSummaryResponse,
     InterviewQuestion,
@@ -35,8 +36,10 @@ from app.rag.access.control import (
 from app.rag.audit.coverage_report import resolve_existing_file
 from app.rag.cases.loader import case_by_id, load_rag_cases
 from app.rag.cases.visibility import visible_case_ids
+from app.rag.cell_contracts import upsert_contract_verification_record
 from app.rag.generate.llm_provider import ModelProfileError, validate_model_profile
 from app.rag.index.db import engine
+from app.rag.pipeline import retrieve_context
 from app.settings import settings
 
 router = APIRouter()
@@ -134,6 +137,40 @@ class CellCollectiveSummaryRequest(BaseModel):
     filters: dict[str, Any] | None = None
     top_k: int | None = None
     model_profile: str | None = None
+
+class CellContractVerificationChunkIngest(BaseModel):
+    id: str
+    documentKind: str
+    key: str | None = None
+    phase: str | None = None
+    status: str | None = None
+    verifiedAt: str | None = None
+    content: str
+
+
+class CellContractVerificationIngestRequest(BaseModel):
+    repo: str = "CellProtocol"
+    cellType: str
+    targetEndpoint: str
+    targetLabel: str | None = None
+    verificationStatus: str
+    lastVerifiedAt: str | None = None
+    contractVersion: int | None = None
+    failedAssertionCount: int = 0
+    hasRuntimeProbe: bool | None = None
+    usedExpectedContracts: bool | None = None
+    sourceType: str = "cellprotocol_docs"
+    recordMarkdown: str | None = None
+    chunks: list[CellContractVerificationChunkIngest] = Field(default_factory=list)
+
+
+class CellContractVerificationIngestResponse(BaseModel):
+    case_id: str
+    doc_id: str
+    title: str
+    source_type: str
+    chunk_count: int
+
 
 
 def _resolve_identity(
@@ -456,6 +493,29 @@ def cell_query(case_id: str, req: QueryRequest, identity: CellIdentity = Depends
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/v1/cell/cases/{case_id}/retrieve", response_model=RetrieveResponse)
+def cell_retrieve(case_id: str, req: RetrieveRequest, identity: CellIdentity = Depends(_resolve_identity)):
+    _require_role(case_id, identity, "viewer")
+    try:
+        validate_model_profile(req.model_profile)
+        return retrieve_context(
+            message=req.query,
+            conversation_id=req.conversation_id,
+            filters={**(req.filters or {}), "rag_case_id": case_id},
+            top_k=req.top_k,
+            model_profile=req.model_profile,
+            prompt_profile_case_id=req.prompt_profile_case_id,
+            rewrite_query=req.rewrite_query,
+            max_context_chars=req.max_context_chars,
+        )
+    except ModelProfileError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/v1/cell/cases/{case_id}/interviews/collective-summary", response_model=CollectiveSummaryResponse)
 def cell_collective_summary(
     case_id: str,
@@ -489,6 +549,33 @@ def cell_collective_summary(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post(
+    "/v1/cell/cases/{case_id}/contract-verification",
+    response_model=CellContractVerificationIngestResponse,
+)
+def cell_contract_verification_ingest(
+    case_id: str,
+    req: CellContractVerificationIngestRequest,
+    identity: CellIdentity = Depends(_resolve_identity),
+):
+    _require_role(case_id, identity, "admin")
+    allowed_source_types = _case_source_types(case_id)
+    if allowed_source_types and req.sourceType not in allowed_source_types:
+        raise HTTPException(
+            status_code=400,
+            detail=f"source_type '{req.sourceType}' is not enabled for case '{case_id}'.",
+        )
+    try:
+        result = upsert_contract_verification_record(case_id=case_id, record=req.model_dump())
+        return CellContractVerificationIngestResponse(case_id=case_id, **result)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/v1/cell/cases/{case_id}/corpus", response_model=CorpusResponse)
 def cell_corpus(
     case_id: str,
@@ -502,6 +589,12 @@ def cell_corpus(
     total, rows = _corpus_rows(case_id, q, include_tombstones, limit, offset)
     items = [CorpusDocument(**row) for row in rows]
     return CorpusResponse(case_id=case_id, total=total, limit=limit, offset=offset, items=items)
+
+
+@router.get("/v1/cell/cases/{case_id}/status", response_model=CaseStatusResponse)
+def cell_case_status(case_id: str, identity: CellIdentity = Depends(_resolve_identity)):
+    _require_role(case_id, identity, "viewer")
+    return _case_status(case_id)
 
 
 @router.get("/v1/cell/cases/{case_id}/links", response_model=LinkGraphResponse)

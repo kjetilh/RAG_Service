@@ -59,6 +59,23 @@ def test_route_query_defaults_to_docs_when_no_keywords():
     assert plan["reason"] == "default_domain"
 
 
+def test_route_query_default_docs_fallback_includes_private_dimy_sources():
+    settings.query_router_enabled = True
+    settings.query_router_docs_source_types_json = ""
+    settings.query_router_prompts_source_types_json = ""
+    settings.query_router_docs_keywords_json = ""
+    settings.query_router_prompts_keywords_json = ""
+
+    out_filters, plan = route_query("Hvordan virker RAGGatewayCell i CellScaffold?", {})
+    assert out_filters["source_type"] == [
+        "haven_docs",
+        "cellprotocol_docs",
+        "cellscaffold_internal_docs",
+        "dimy_private_dev_docs",
+    ]
+    assert plan["selected_domain"] == "docs"
+
+
 def test_route_query_routes_to_docs_on_docs_keyword():
     settings.query_router_enabled = True
     settings.query_router_docs_source_types_json = '["haven_docs"]'
