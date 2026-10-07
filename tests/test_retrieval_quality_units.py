@@ -152,3 +152,47 @@ def test_ordinary_rate_limit_is_still_retried(monkeypatch):
     monkeypatch.setattr(lp.time, "sleep", lambda s: None)
     r = lp.OpenAICompatibleProvider("http://x", "k", "m")._post_with_retries("http://x", {}, {})
     assert r.status_code == 200 and lp.llm_unavailable_reason() is None
+
+
+def test_link_graph_resolves_relative_links_and_file_mentions():
+    from app.rag.retrieve.graph_expand import build_link_graph
+    docs = [
+        {"doc_id": "a", "file_path": "/data/Book/04_Agreements.md", "text": "see [flows](05_Flows.md#x) and `Gap_Analysis.md`"},
+        {"doc_id": "b", "file_path": "/data/Book/05_Flows.md", "text": "no links"},
+        {"doc_id": "c", "file_path": "/data/Gap_Analysis.md", "text": "[ext](https://example.org/05_Flows.md)"},
+        {"doc_id": "d", "file_path": "/data/x/README.md", "text": "README.md twice"},
+        {"doc_id": "e", "file_path": "/data/y/README.md", "text": ""},
+    ]
+    g = build_link_graph(docs)
+    assert g["a"]["b"] >= 1.0 and g["b"]["a"] > 0
+    assert g["a"]["c"] == 0.6
+    assert "b" not in g.get("c", {}), "external links are not edges"
+    assert "e" not in g.get("d", {}), "an ambiguous file name is not an edge"
+
+
+def test_reserved_slots_never_move_the_ranking_above_them(monkeypatch):
+    from types import SimpleNamespace
+    from app.rag.retrieve import pack_context as pc
+    from app.rag.retrieve import graph_expand
+
+    cands = pc.CandidateList(
+        SimpleNamespace(chunk_id=f"c{i}", doc_id=f"d{i}", ordinal=0, content="x", score=1.0 - i * 0.01, title="T")
+        for i in range(12)
+    )
+    cands.query_emb, cands.filters = [0.1], {}
+    linked = [("g1", "dlinked", 0, "T", None, None, "docs", None, None, None, None, "linked text", 0.4, "S")]
+    monkeypatch.setattr(graph_expand, "linked_document_chunks", lambda *a, **k: linked)
+
+    monkeypatch.setattr(pc, "_graph_mode", lambda: "off", raising=False)
+    from app.settings import settings
+    monkeypatch.setattr(settings, "graph_mode", "off")
+    plain = [c.chunk_id for c in pc.pack_context(cands, top_k=6, max_chunks_per_doc=3).citations]
+    monkeypatch.setattr(settings, "graph_mode", "expand")
+    expanded = [c.chunk_id for c in pc.pack_context(cands, top_k=6, max_chunks_per_doc=3).citations]
+    assert plain == ["c0", "c1", "c2", "c3", "c4", "c5"]
+    assert expanded == ["c0", "c1", "c2", "c3", "c4", "g1"], "top places unchanged, linked document last"
+
+    def boom(*a, **k):
+        raise RuntimeError("db down")
+    monkeypatch.setattr(graph_expand, "linked_document_chunks", boom)
+    assert [c.chunk_id for c in pc.pack_context(cands, top_k=6, max_chunks_per_doc=3).citations] == plain

@@ -81,13 +81,13 @@ class Settings(BaseSettings):
     # ivfflat with the default probes=1 scans about 1 % of the vectors; for
     # corpora of this size an exact scan is both fast and correct.
     vector_exact_search: bool = True
-    # off | expand: after fusion, the best chunk of documents linked from the
-    # top documents is added to the candidate list.
+    # off | expand: the best chunk of documents linked from the top documents
+    # takes the last graph_add places of the context (reserved slots); the
+    # ranking above them is not changed. See app/rag/retrieve/graph_expand.py.
     graph_mode: str = "off"
-    graph_head: int = 6
+    graph_head: int = 4
     graph_fan: int = 4
-    graph_add: int = 4
-    graph_position: int = 8
+    graph_add: int = 2
     reranker_top_n: int = 30
 
 

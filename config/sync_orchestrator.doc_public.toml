@@ -1,0 +1,75 @@
+# Sources for the PUBLIC documentation RAG (doc.haven.digipomps.org, case dimy_docs).
+#
+# Rule: this endpoint answers without authentication, so it only holds documents
+# from repositories that are public on GitHub. Verified 2026-10-08 (HTTP 200 without
+# credentials): CellProtocol, CellProtocolDocuments, Binding, CellUtility,
+# DiMyDocuments, HAVEN_MVP, RAG_Service. Private at that time, and therefore NOT
+# here: CellScaffold, DiMyMicropayments, DiMyMint, Sprout, DiMy-Source-Editor-Extension.
+# Until 2026-10-08 those were ingested here too, contrary to DiMyDevRAG/docs/CORPUS_POLICY.md.
+# Private developer docs belong in an instance that is only reachable with
+# authentication (see docs/RETRIEVAL_QUALITY.md, "Private sources").
+#
+# Before adding a source: check that the repository is public, or do not add it.
+
+[orchestrator]
+ingest_root = "/srv/ops/rag_service/uploads/dimy"
+ingest_live_subdir = "cell_haven_docs_live"
+admin_base_url = "http://127.0.0.1:8102"
+admin_api_key_env = "RAG_DIMY_ADMIN_API_KEY"
+request_timeout_sec = 1800
+fetch_coverage_actions = true
+
+include_default = ["**/*.md", "**/*.markdown"]
+exclude_default = ["**/.git/**", "**/.venv/**", "**/node_modules/**", "**/__pycache__/**", "**/.build/**", "**/.swiftpm/**", "**/uploads/**", "**/done/**", "**/failed/**", "**/THIRD_PARTY_LICENSES/**", "THIRD_PARTY_LICENSES/**", "**/Prompts/**", "Prompts/**", "**/prompts/**", "prompts/**", "*prompt*.md", "*Prompt*.md", "**/*prompt*.md", "**/*Prompt*.md", "**/*.prompt"]
+# Exclude patterns are fnmatch on the repo-relative path: "**/X/**" does not match a top-level X/, so both forms are listed.
+
+[[source]]
+name = "CellProtocolDocumentsDocs"
+repo_path = "/srv/ops/repos/CellProtocolDocuments"
+source_type = "cellprotocol_docs"
+target_subdir = "CellProtocolDocuments"
+
+[[source]]
+name = "CellProtocolDocs"
+repo_path = "/srv/ops/repos/CellProtocol"
+source_type = "cellprotocol_docs"
+target_subdir = "CellProtocol"
+
+[[source]]
+name = "BindingDocs"
+repo_path = "/srv/ops/repos/Binding"
+source_type = "haven_docs"
+target_subdir = "Binding/Documentation"
+exclude = ["CellProtocolDocuments/**"]
+
+[[source]]
+name = "CellUtilityDocs"
+repo_path = "/srv/ops/repos/CellUtility"
+source_type = "haven_docs"
+target_subdir = "CellUtility"
+
+[[source]]
+name = "DiMyDocumentsDocs"
+repo_path = "/srv/ops/repos/DiMyDocuments"
+source_type = "haven_docs"
+target_subdir = "DiMyDocuments"
+
+[[source]]
+name = "HAVENMVPDocs"
+repo_path = "/srv/ops/repos/HAVEN_MVP"
+source_type = "haven_docs"
+target_subdir = "HAVEN_MVP"
+
+[[source]]
+name = "RAGServiceDocs"
+repo_path = "/srv/ops/repos/RAG_Service"
+source_type = "haven_docs"
+target_subdir = "RAG_Service/Documentation"
+exclude = ["docs/cell_composition/**"]
+
+[[source]]
+name = "RAGServiceCellCompositionDocs"
+repo_path = "/srv/ops/repos/RAG_Service"
+source_type = "prompt_docs"
+target_subdir = "RAG_Service/CellCompositionDocs"
+include = ["docs/cell_composition/**/*.md"]

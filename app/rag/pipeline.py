@@ -15,7 +15,7 @@ from app.rag.retrieve.hybrid import RetrievedChunk, hybrid_retrieve
 from app.rag.planner.answer_modes import sanitize_text_without_citations, trim_excerpt
 from app.rag.planner.deterministic import PlanResult, plan_query
 from app.rag.retrieve.rerank import default_reranker
-from app.rag.retrieve.pack_context import pack_context
+from app.rag.retrieve.pack_context import CandidateList, pack_context
 from app.rag.generate.composer import compose_answer, rewrite_query_if_enabled
 from app.rag.generate.llm_provider import LLMMessage, LLMUnavailable, default_provider
 from app.rag.generate.prompt_config_store import resolve_effective_paths
@@ -296,7 +296,12 @@ def _retrieve_candidates(
         reranker = default_reranker()
         candidates = reranker.rerank(query, candidates)
 
-    return candidates, effective_query
+    # pack_context may add linked documents (GRAPH_MODE=expand); it needs the
+    # query vector and the filters that produced these candidates.
+    carried = CandidateList(candidates)
+    carried.query_emb = query_emb
+    carried.filters = _map_filters(filters)
+    return carried, effective_query
 
 
 def _sources_only_answer(citations: list[Citation], reason: str, limit: int = 6) -> str:

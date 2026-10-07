@@ -142,8 +142,4 @@ def hybrid_retrieve(query: str, query_emb: np.ndarray, top_k_vector: int, top_k_
         fused = _fuse_rrf(vec_chunks, lex_chunks, int(getattr(settings, "rrf_k", 60)))
     else:
         fused = _fuse_max(vec_chunks, lex_chunks)
-
-    if str(getattr(settings, "graph_mode", "off")).lower() == "expand" and fused:
-        from app.rag.retrieve.graph_expand import expand_with_linked_documents
-        fused = expand_with_linked_documents(fused, query_emb=query_emb, filters=filters)
     return fused

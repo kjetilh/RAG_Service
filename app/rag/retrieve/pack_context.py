@@ -14,9 +14,14 @@ class PackedContext:
     debug: Optional[Dict[str, Any]] = None
 
 
-def pack_context(candidates, top_k: int, max_chunks_per_doc: int = 4) -> PackedContext:
-    # candidates: list[RetrievedChunk] (fra hybrid_retrieve / reranker)
-    # Vi gjør en enkel, robust default-selection:
+class CandidateList(list):
+    """Retrieval candidates plus the query vector and filters they came from."""
+
+    query_emb = None
+    filters = None
+
+
+def _select(candidates, top_k: int, max_chunks_per_doc: int) -> list:
     selected = []
     per_doc: Dict[str, int] = {}
 
@@ -39,6 +44,59 @@ def pack_context(candidates, top_k: int, max_chunks_per_doc: int = 4) -> PackedC
             continue
         per_doc[doc_id] = n + 1
         selected.append(c)
+    return selected
+
+
+def select_with_linked_documents(candidates, top_k: int, max_chunks_per_doc: int, query_emb=None, filters=None) -> list:
+    """Selection with reserved slots for linked documents (GRAPH_MODE=expand).
+
+    The usual selection decides which documents are on top. If documents linked
+    from them are missing, their best chunk takes the last places; the places
+    above are filled by the same ranking as before.
+    """
+    from app.settings import settings
+
+    base = _select(candidates, top_k, max_chunks_per_doc)
+    if str(getattr(settings, "graph_mode", "off")).lower() != "expand" or not base or query_emb is None:
+        return base
+    try:
+        from app.rag.retrieve.graph_expand import linked_document_chunks
+        from app.rag.retrieve.hybrid import _row_to_chunk
+
+        doc_ids: list[str] = []
+        for c in base:
+            if c.doc_id not in doc_ids:
+                doc_ids.append(c.doc_id)
+        rows = linked_document_chunks(doc_ids, query_emb, filters)
+    except Exception as exc:  # the graph is an addition; it must never fail a request
+        print(f"[graph] expansion skipped: {exc!r}")
+        return base
+    if not rows:
+        return base
+    kept = _select(candidates, max(1, top_k - len(rows)), max_chunks_per_doc)
+    floor = min(float(getattr(c, "score", 0.0)) for c in kept) if kept else 0.0
+    extra = []
+    for i, r in enumerate(rows):
+        chunk = _row_to_chunk(r, "graph")
+        chunk.score = floor - (i + 1) * 1e-6  # keeps them last under the deterministic sort
+        extra.append(chunk)
+    return kept + extra
+
+
+def pack_context(candidates, top_k: int, max_chunks_per_doc: int = 4, query_emb=None, filters=None) -> PackedContext:
+    # candidates: list[RetrievedChunk] (fra hybrid_retrieve / reranker)
+    if query_emb is None:
+        query_emb = getattr(candidates, "query_emb", None)
+    if filters is None:
+        filters = getattr(candidates, "filters", None)
+    selected = select_with_linked_documents(candidates, top_k, max_chunks_per_doc, query_emb=query_emb, filters=filters)
+    return _pack_selected(selected, top_k, max_chunks_per_doc)
+
+
+def _pack_selected(selected, top_k: int, max_chunks_per_doc: int) -> PackedContext:
+    per_doc: Dict[str, int] = {}
+    for c in selected:
+        per_doc[getattr(c, "doc_id", "")] = per_doc.get(getattr(c, "doc_id", ""), 0) + 1
 
     # Bygg context + citations
     parts: List[str] = []
