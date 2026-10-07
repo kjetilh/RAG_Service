@@ -25,6 +25,11 @@ class CrossEncoderReranker(Reranker):
     def rerank(self, query: str, chunks: List[RetrievedChunk]) -> List[RetrievedChunk]:
         if not chunks:
             return chunks
+        # Only the head is re-scored; a cross-encoder call per candidate is the
+        # expensive part of a request.
+        top_n = max(1, int(getattr(settings, "reranker_top_n", 30)))
+        ordered = sorted(chunks, key=lambda c: c.score, reverse=True)
+        chunks, tail = ordered[:top_n], ordered[top_n:]
         pairs = [(query, c.content) for c in chunks]
         scores = self.model.predict(pairs)  # higher is better
         # Combine with existing score as a small prior
@@ -43,11 +48,19 @@ class CrossEncoderReranker(Reranker):
                 language=c.language,
                 identifiers=c.identifiers,
                 content=c.content,
-                score=float(0.20 * c.score + 0.80 * float(s)),
+                score=float(s),
                 channel=c.channel,
+                section_path=getattr(c, "section_path", None),
             )
             out.append(c2)
-        return sorted(out, key=lambda x: x.score, reverse=True)
+        head = sorted(out, key=lambda x: x.score, reverse=True)
+        if not tail:
+            return head
+        # Keep the tail below the re-scored head whatever scale the model uses.
+        floor = min(x.score for x in head) - 1.0
+        return head + [
+            RetrievedChunk(**{**t.__dict__, "score": floor - i * 1e-6}) for i, t in enumerate(tail)
+        ]
 
 def default_reranker() -> Reranker:
     if bool(settings.reranker_enabled):

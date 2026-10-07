@@ -1,6 +1,7 @@
 import numpy as np
 from sqlalchemy import text
 from app.rag.index.db import engine
+from app.settings import settings
 
 def _to_pgvector(vec: np.ndarray) -> str:
     return "[" + ",".join(f"{float(x):.6f}" for x in vec.tolist()) + "]"
@@ -28,17 +29,24 @@ def vector_search(query_embedding: np.ndarray, top_k: int = 50, filters: dict | 
         where.append("d.doc_id = ANY(:doc_id)")
         params["doc_id"] = filters["doc_id"]
     where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+    # ivfflat with probes=1 looks at roughly one list in a hundred, and the
+    # source_type/doc_state filter is applied after that, so the "top 50" can be
+    # both incomplete and wrong. "+ 0" keeps the planner from using the
+    # approximate index: one statement, exact order, a few ms at this size.
+    order_expr = "(e.embedding <=> CAST(:q AS vector)) + 0" if bool(getattr(settings, "vector_exact_search", True)) \
+        else "e.embedding <=> CAST(:q AS vector)"
 
     sql = f'''
     SELECT c.chunk_id, c.doc_id, c.ordinal, d.title, d.author, d.year, d.source_type,
            d.publisher, d.url, d.language, d.identifiers,
            c.content,
-           1 - (e.embedding <=> CAST(:q AS vector)) AS score
+           1 - (e.embedding <=> CAST(:q AS vector)) AS score,
+           c.section_path
     FROM embeddings e
     JOIN chunks c ON c.chunk_id = e.chunk_id
     JOIN documents d ON d.doc_id = c.doc_id
     {where_sql}
-    ORDER BY e.embedding <=> CAST(:q AS vector), c.doc_id, c.ordinal, c.chunk_id
+    ORDER BY {order_expr}, c.doc_id, c.ordinal, c.chunk_id
     LIMIT :top_k
     '''
     with engine().begin() as conn:

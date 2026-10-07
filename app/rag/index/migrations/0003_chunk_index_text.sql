@@ -1,0 +1,1 @@
+ALTER TABLE chunks ADD COLUMN IF NOT EXISTS index_text TEXT;

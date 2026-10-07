@@ -100,6 +100,41 @@ def _resolve_runtime_config(model_profile: str | None = None) -> LLMRuntimeConfi
     return LLMRuntimeConfig(provider=provider, base_url=base_url, api_key=api_key, model=model)
 
 
+class LLMUnavailable(RuntimeError):
+    """The language model cannot answer and retrying will not help (no credits,
+    bad key, account disabled). Callers degrade to "sources without a
+    formulated answer" instead of failing the request."""
+
+
+# After a non-retryable failure, do not call the provider again for a while.
+# On 2026-10-08 an empty OpenAI account made every question wait ~95 s in
+# retries (query rewrite + answer) and then return HTTP 500, for two months.
+_BREAKER_SECONDS = 300.0
+_breaker: Dict[str, Any] = {"until": 0.0, "reason": ""}
+
+
+def llm_unavailable_reason() -> Optional[str]:
+    return _breaker["reason"] if time.monotonic() < float(_breaker["until"]) else None
+
+
+def _trip_breaker(reason: str) -> None:
+    _breaker["until"] = time.monotonic() + _BREAKER_SECONDS
+    _breaker["reason"] = reason
+
+
+def reset_llm_breaker() -> None:
+    _breaker["until"], _breaker["reason"] = 0.0, ""
+
+
+def _non_retryable_reason(status_code: int, body: str) -> Optional[str]:
+    low = (body or "").lower()
+    if status_code == 429 and ("insufficient_quota" in low or "no credits" in low or "billing" in low):
+        return "The language model account has no credits left (insufficient_quota)."
+    if status_code in (401, 403):
+        return f"The language model rejected the credentials (HTTP {status_code})."
+    return None
+
+
 class OpenAICompatibleProvider(LLMProvider):
     """Minimal OpenAI-compatible /chat/completions client with robust 429 handling."""
 
@@ -120,6 +155,10 @@ class OpenAICompatibleProvider(LLMProvider):
     ) -> requests.Response:
         last_exc: Optional[Exception] = None
 
+        blocked = llm_unavailable_reason()
+        if blocked:
+            raise LLMUnavailable(blocked)
+
         for attempt in range(1, max_attempts + 1):
             try:
                 r = requests.post(url, json=payload, headers=headers, timeout=timeout_s)
@@ -127,6 +166,12 @@ class OpenAICompatibleProvider(LLMProvider):
                 # Success
                 if r.status_code < 400:
                     return r
+
+                reason = _non_retryable_reason(r.status_code, getattr(r, "text", "") or "")
+                if reason:
+                    print(f"[LLM] HTTP {r.status_code}, not retryable: {reason}")
+                    _trip_breaker(reason)
+                    raise LLMUnavailable(reason)
 
                 # Retryable statuses (rate limits + transient upstream)
                 if r.status_code in (408, 429, 500, 502, 503, 504):
@@ -165,6 +210,8 @@ class OpenAICompatibleProvider(LLMProvider):
                 # Non-retryable errors: raise immediately with detail
                 r.raise_for_status()
                 return r  # unreachable
+            except LLMUnavailable:
+                raise
             except requests.RequestException as e:
                 # Network / DNS / timeout etc. Retry a few times.
                 last_exc = e

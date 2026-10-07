@@ -125,6 +125,19 @@ services:
       CELL_GATEWAY_SHARED_SECRET: '${RAG_DIMY_CELL_GATEWAY_SHARED_SECRET:-}'
       CELL_OWNER_USER_IDS_JSON: '${RAG_DIMY_CELL_OWNER_USER_IDS_JSON:-[]}'
       INGEST_ROOT: /data/uploads
+      # Retrieval quality (see docs/RETRIEVAL_QUALITY.md). Changing EMBEDDING_MODEL,
+      # CHUNKER_VERSION or DOC_ID_SCHEME requires a rebuilt index (new database).
+      EMBEDDING_MODEL: ${RAG_DIMY_EMBEDDING_MODEL:-sentence-transformers/all-MiniLM-L6-v2}
+      EMBEDDING_QUERY_PREFIX: '${RAG_DIMY_EMBEDDING_QUERY_PREFIX:-}'
+      EMBEDDING_PASSAGE_PREFIX: '${RAG_DIMY_EMBEDDING_PASSAGE_PREFIX:-}'
+      CHUNKER_VERSION: ${RAG_DIMY_CHUNKER_VERSION:-v1}
+      DOC_ID_SCHEME: ${RAG_DIMY_DOC_ID_SCHEME:-v1}
+      HYBRID_FUSION: ${RAG_DIMY_HYBRID_FUSION:-max}
+      LEXICAL_MODE: ${RAG_DIMY_LEXICAL_MODE:-and}
+      GRAPH_MODE: ${RAG_DIMY_GRAPH_MODE:-off}
+      RERANKER_ENABLED: ${RAG_DIMY_RERANKER_ENABLED:-false}
+      RERANKER_MODEL: ${RAG_DIMY_RERANKER_MODEL:-cross-encoder/ms-marco-MiniLM-L-6-v2}
+      HF_HOME: /root/.cache/huggingface
     depends_on:
       rag_dimy_db:
         condition: service_healthy
@@ -132,6 +145,8 @@ services:
       - "127.0.0.1:${RAG_DIMY_API_PORT:-8102}:8000"
     volumes:
       - ${RAG_DIMY_UPLOADS_DIR:-../uploads/dimy}:/data/uploads
+      # Model files survive a container recreate, so a start does not depend on huggingface.co.
+      - ${RAG_HF_CACHE_DIR:-../hf_cache}:/root/.cache/huggingface
     command:
       - /bin/sh
       - -c

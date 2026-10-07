@@ -1,8 +1,9 @@
 from __future__ import annotations
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import numpy as np
 from app.rag.index.vector_store import vector_search
 from app.rag.index.lexical_store import lexical_search
+from app.settings import settings
 
 @dataclass
 class RetrievedChunk:
@@ -20,6 +21,7 @@ class RetrievedChunk:
     content: str
     score: float
     channel: str
+    section_path: str | None = None
 
 def _row_to_chunk(r, channel: str) -> RetrievedChunk:
     # Support both old and new row shapes
@@ -76,6 +78,7 @@ def _row_to_chunk(r, channel: str) -> RetrievedChunk:
             content=r[11],
             score=float(r[12]),
             channel=channel,
+            section_path=(r[13] if len(r) >= 14 else None),
         )
     else:
         raise ValueError(f"Unexpected row length={len(r)} for {channel}: {r}")
@@ -91,18 +94,9 @@ def _deterministic_sort_key(chunk: RetrievedChunk):
     )
 
 
-def hybrid_retrieve(query: str, query_emb: np.ndarray, top_k_vector: int, top_k_lexical: int, filters: dict):
-    vec_rows = vector_search(query_emb, top_k=top_k_vector, filters=filters)
-    lex_rows = lexical_search(query, top_k=top_k_lexical, filters=filters)
-
-    out: list[RetrievedChunk] = []
-    for r in vec_rows:
-        out.append(_row_to_chunk(r, "vector"))
-    for r in lex_rows:
-        out.append(_row_to_chunk(r, "lexical"))
-
+def _fuse_max(vec_chunks: list[RetrievedChunk], lex_chunks: list[RetrievedChunk]) -> list[RetrievedChunk]:
     best: dict[str, RetrievedChunk] = {}
-    for c in out:
+    for c in vec_chunks + lex_chunks:
         if c.chunk_id not in best:
             best[c.chunk_id] = c
             continue
@@ -113,3 +107,43 @@ def hybrid_retrieve(query: str, query_emb: np.ndarray, top_k_vector: int, top_k_
             if _deterministic_sort_key(c) < _deterministic_sort_key(prev):
                 best[c.chunk_id] = c
     return sorted(best.values(), key=_deterministic_sort_key)
+
+
+def _fuse_rrf(vec_chunks: list[RetrievedChunk], lex_chunks: list[RetrievedChunk], k: int) -> list[RetrievedChunk]:
+    """Reciprocal rank fusion.
+
+    Cosine similarity (0..1) and a lexical score live on different scales, so
+    taking the larger raw score lets the vector channel decide alone. RRF only
+    uses each channel's ranking: score = sum(1 / (k + rank)).
+    """
+    fused: dict[str, float] = {}
+    first: dict[str, RetrievedChunk] = {}
+    channels: dict[str, set[str]] = {}
+    for ranking in (vec_chunks, lex_chunks):
+        for rank, c in enumerate(ranking):
+            fused[c.chunk_id] = fused.get(c.chunk_id, 0.0) + 1.0 / (k + rank + 1)
+            first.setdefault(c.chunk_id, c)
+            channels.setdefault(c.chunk_id, set()).add(c.channel)
+    out: list[RetrievedChunk] = []
+    for chunk_id, score in fused.items():
+        c = first[chunk_id]
+        ch = channels[chunk_id]
+        out.append(replace(c, score=float(score), channel="both" if len(ch) > 1 else next(iter(ch))))
+    return sorted(out, key=_deterministic_sort_key)
+
+
+def hybrid_retrieve(query: str, query_emb: np.ndarray, top_k_vector: int, top_k_lexical: int, filters: dict):
+    vec_rows = vector_search(query_emb, top_k=top_k_vector, filters=filters)
+    lex_rows = lexical_search(query, top_k=top_k_lexical, filters=filters)
+    vec_chunks = [_row_to_chunk(r, "vector") for r in vec_rows]
+    lex_chunks = [_row_to_chunk(r, "lexical") for r in lex_rows]
+
+    if str(getattr(settings, "hybrid_fusion", "max")).lower() == "rrf":
+        fused = _fuse_rrf(vec_chunks, lex_chunks, int(getattr(settings, "rrf_k", 60)))
+    else:
+        fused = _fuse_max(vec_chunks, lex_chunks)
+
+    if str(getattr(settings, "graph_mode", "off")).lower() == "expand" and fused:
+        from app.rag.retrieve.graph_expand import expand_with_linked_documents
+        fused = expand_with_linked_documents(fused, query_emb=query_emb, filters=filters)
+    return fused

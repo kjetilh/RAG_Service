@@ -48,7 +48,13 @@ def pack_context(candidates, top_k: int, max_chunks_per_doc: int = 4) -> PackedC
         chunk_id = getattr(c, "chunk_id", "")
         doc_id = getattr(c, "doc_id", "")
         content = getattr(c, "content", "") or ""
-        parts.append(f"[{doc_id}::{chunk_id}]\n{content}")
+        section_path = getattr(c, "section_path", None)
+        title = getattr(c, "title", "") or ""
+        if section_path:
+            # The heading path is part of what the chunk means ("Current limits" of which tool?).
+            parts.append(f"[{doc_id}::{chunk_id}] {title} > {section_path}\n{content}")
+        else:
+            parts.append(f"[{doc_id}::{chunk_id}]\n{content}")
 
         citations.append(Citation(
             doc_id=doc_id,

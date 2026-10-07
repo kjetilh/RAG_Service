@@ -17,7 +17,7 @@ from app.rag.planner.deterministic import PlanResult, plan_query
 from app.rag.retrieve.rerank import default_reranker
 from app.rag.retrieve.pack_context import pack_context
 from app.rag.generate.composer import compose_answer, rewrite_query_if_enabled
-from app.rag.generate.llm_provider import LLMMessage, default_provider
+from app.rag.generate.llm_provider import LLMMessage, LLMUnavailable, default_provider
 from app.rag.generate.prompt_config_store import resolve_effective_paths
 from app.rag.interviews.collective import prepare_question_set
 from app.rag.eval.gate import run_evaluation_gate
@@ -281,7 +281,8 @@ def _retrieve_candidates(
 ) -> tuple[list[RetrievedChunk], str]:
     effective_query = rewrite_query_if_enabled(query, model_profile=model_profile) if rewrite_query else query
     embedder = default_embedder()
-    query_emb = embedder.embed(effective_query)
+    embed_query = getattr(embedder, "embed_query", None)
+    query_emb = embed_query(effective_query) if callable(embed_query) else embedder.embed(effective_query)
 
     candidates = hybrid_retrieve(
         query=effective_query,
@@ -293,9 +294,22 @@ def _retrieve_candidates(
 
     if settings.reranker_enabled:
         reranker = default_reranker()
-        candidates = reranker.rerank(query, candidates, top_k=effective_top_k)
+        candidates = reranker.rerank(query, candidates)
 
     return candidates, effective_query
+
+
+def _sources_only_answer(citations: list[Citation], reason: str, limit: int = 6) -> str:
+    lines = [
+        "Svaret er ikke formulert: språkmodellen er ikke tilgjengelig akkurat nå.",
+        f"Årsak: {reason}",
+        "",
+        "Kildene under er hentet og rangert for spørsmålet, og kan leses direkte:",
+    ]
+    for i, c in enumerate(citations[:limit], start=1):
+        excerpt = " ".join((c.excerpt or "").split())[:220]
+        lines.append(f"[{i}] {c.title}: {excerpt}")
+    return "\n".join(lines)
 
 
 def _render_response(
@@ -348,14 +362,26 @@ def _render_response(
             retrieval_debug=packed.debug,
         )
 
-    with _LLM_SEM:
-        answer = compose_answer(
-            message,
-            packed,
-            model_profile=model_profile,
-            router_instruction=router_instruction,
-            case_id=prompt_case_id,
-            answer_contract=answer_contract,
+    try:
+        with _LLM_SEM:
+            answer = compose_answer(
+                message,
+                packed,
+                model_profile=model_profile,
+                router_instruction=router_instruction,
+                case_id=prompt_case_id,
+                answer_contract=answer_contract,
+            )
+    except LLMUnavailable as e:
+        # Retrieval worked; only the formulation is missing. Say so and hand over
+        # the ranked sources instead of failing the whole request.
+        packed.debug["generation_skipped"] = True
+        packed.debug["generation_error"] = str(e)
+        packed.debug["evaluation_gate"] = run_evaluation_gate(citations, plan.evaluation)
+        return ChatResponse(
+            answer=_sources_only_answer(citations, str(e)),
+            citations=citations,
+            retrieval_debug=packed.debug,
         )
 
     if _wants_quotes(message):
@@ -1364,6 +1390,45 @@ def _run_multi_query_mode(
 
 
 def answer_question(
+    message: str,
+    conversation_id: Optional[str] = None,
+    filters: Optional[Dict[str, Any]] = None,
+    top_k: Optional[int] = None,
+    model_profile: Optional[str] = None,
+    prompt_profile_case_id: Optional[str] = None,
+) -> ChatResponse:
+    """Answer a question; if the language model is unavailable in any answer
+    mode, return the ranked sources with an explicit note instead of failing."""
+    try:
+        return _answer_question_impl(
+            message,
+            conversation_id=conversation_id,
+            filters=filters,
+            top_k=top_k,
+            model_profile=model_profile,
+            prompt_profile_case_id=prompt_profile_case_id,
+        )
+    except LLMUnavailable as e:
+        retrieved = retrieve_context(
+            message,
+            conversation_id=conversation_id,
+            filters=filters,
+            top_k=top_k,
+            model_profile=model_profile,
+            prompt_profile_case_id=prompt_profile_case_id,
+            rewrite_query=False,
+        )
+        debug = dict(retrieved.retrieval_debug or {})
+        debug["generation_skipped"] = True
+        debug["generation_error"] = str(e)
+        return ChatResponse(
+            answer=_sources_only_answer(retrieved.citations, str(e)),
+            citations=retrieved.citations,
+            retrieval_debug=debug,
+        )
+
+
+def _answer_question_impl(
     message: str,
     conversation_id: Optional[str] = None,
     filters: Optional[Dict[str, Any]] = None,

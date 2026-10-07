@@ -14,7 +14,7 @@ COPY config /app/config
 RUN pip install --no-cache-dir -U pip \
  && pip install --no-cache-dir -e '.[pdf,docx,html]' \
  && pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch==2.10.0 \
- && pip install --no-cache-dir sentence-transformers>=3.0.0
+ && pip install --no-cache-dir 'sentence-transformers>=3.0.0'
 
 EXPOSE 8000
 

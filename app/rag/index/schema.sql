@@ -29,6 +29,9 @@ CREATE INDEX IF NOT EXISTS idx_chunks_doc ON chunks(doc_id);
 CREATE INDEX IF NOT EXISTS idx_chunks_tsv ON chunks USING GIN (content_tsv);
 CREATE INDEX IF NOT EXISTS idx_embeddings_vec ON embeddings USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
 
+-- Text that was embedded and lexically indexed (title + heading path + body); NULL = content
+ALTER TABLE chunks ADD COLUMN IF NOT EXISTS index_text TEXT;
+
 -- Optional metadata enrichment (migration-safe)
 ALTER TABLE documents ADD COLUMN IF NOT EXISTS publisher TEXT;
 ALTER TABLE documents ADD COLUMN IF NOT EXISTS url TEXT;
