@@ -20,8 +20,12 @@ request_timeout_sec = 1800
 fetch_coverage_actions = true
 
 include_default = ["**/*.md", "**/*.markdown"]
-exclude_default = ["**/.git/**", "**/.venv/**", "**/node_modules/**", "**/__pycache__/**", "**/.build/**", "**/.swiftpm/**", "**/uploads/**", "**/done/**", "**/failed/**", "**/THIRD_PARTY_LICENSES/**", "THIRD_PARTY_LICENSES/**", "**/Prompts/**", "Prompts/**", "**/prompts/**", "prompts/**", "*prompt*.md", "*Prompt*.md", "**/*prompt*.md", "**/*Prompt*.md", "**/*.prompt"]
-# Exclude patterns are fnmatch on the repo-relative path: "**/X/**" does not match a top-level X/, so both forms are listed.
+exclude_default = ["**/.git/**", "**/.venv/**", "**/node_modules/**", "**/__pycache__/**", "**/.build/**", "**/.swiftpm/**", "**/uploads/**", "**/done/**", "**/failed/**", "**/THIRD_PARTY_LICENSES/**", "THIRD_PARTY_LICENSES/**", "**/Prompts/**", "Prompts/**", "**/prompts/**", "prompts/**", "*.prompt", "**/*.prompt", "*[Pp]rompt.md", "**/*[Pp]rompt.md", "*[Pp]rompts.md", "**/*[Pp]rompts.md", "SystemPrompt*.md", "**/SystemPrompt*.md", "system_prompt*.md", "**/system_prompt*.md"]
+# Exclude patterns are fnmatch on the repo-relative path, and "*" also matches "/":
+#  - "**/X/**" does not match a top-level X/, so both forms are listed
+#  - "**/*prompt*.md" would also drop every file below a folder with "Prompt" in its name
+#    (Tools/RAGPromptTransformer/README.md) and Book/28_RAG_Prompt_Transformer_Cell.md.
+#    That happened on 2026-10-08; prompt FILES are therefore matched by how the name ends.
 
 [[source]]
 name = "CellProtocolDocumentsDocs"
