@@ -32,6 +32,8 @@ name = "CellProtocolDocumentsDocs"
 repo_path = "/srv/ops/repos/CellProtocolDocuments"
 source_type = "cellprotocol_docs"
 target_subdir = "CellProtocolDocuments"
+# Frozen copies of Book chapters handed to others; they outranked the current chapters.
+exclude = ["Deliverables/Vegar_CellProtocol_Scaffold_Kotlin_Pack/source_docs/**"]
 
 [[source]]
 name = "CellProtocolDocs"
@@ -57,6 +59,8 @@ name = "DiMyDocumentsDocs"
 repo_path = "/srv/ops/repos/DiMyDocuments"
 source_type = "haven_docs"
 target_subdir = "DiMyDocuments"
+# Old copies of CellProtocol docs kept as research sources.
+exclude = ["global_value_redistribution_research/sources/cellprotocol/**"]
 
 [[source]]
 name = "HAVENMVPDocs"

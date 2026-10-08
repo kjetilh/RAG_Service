@@ -120,7 +120,7 @@ def _pack_selected(selected, top_k: int, max_chunks_per_doc: int) -> PackedConte
             title=getattr(c, "title", "") or "",
             chunk_id=chunk_id,
             score=float(getattr(c, "score", 0.0)),
-            excerpt=content[:800],
+            excerpt=content[:2400],  # a whole v2 chunk; 800 cut answers off mid-sentence
             download_url=f"/v1/documents/{quote(doc_id, safe='')}/download",
             year=getattr(c, "year", None),
             author=getattr(c, "author", None),
