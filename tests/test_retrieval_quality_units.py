@@ -260,3 +260,26 @@ def test_retrieval_config_route_exposes_settings_but_no_secrets():
     assert {"embedding_model", "chunker_version", "hybrid_fusion", "lexical_mode", "reranker_enabled", "warm_up"} <= set(body)
     text = str(body).lower()
     assert "api_key" not in text and "database_url" not in text and "secret" not in text
+
+
+def test_v2_does_not_read_code_comments_as_headings():
+    text = "# Usage\n\n" + ("intro " * 70) + "\n\n```bash\n# second step\nmake build\n```\n\n## Next\n\n" + ("more " * 70)
+    chunks = chunker.chunk_text_v2("d", text, doc_title="T")
+    assert not any("second step" in (c.section_path or "") for c in chunks)
+    assert any("# second step\nmake build" in c.content for c in chunks)
+
+
+def test_rerank_scores_are_between_zero_and_one():
+    from app.rag.retrieve import rerank as rr
+    mk = lambda cid: hybrid_mod.RetrievedChunk(cid, "d", 0, "T", None, None, "docs", None, None, None, None, "b", 0.5, "vector")
+    out = rr.order_after_rerank([mk("a"), mk("b")], [-9.0, 4.0], [mk("t")])
+    assert [c.chunk_id for c in out] == ["b", "a", "t"] and 0.0 < out[1].score < out[0].score < 1.0
+
+
+def test_breaker_is_per_provider(monkeypatch):
+    from app.rag.generate import llm_provider as lp
+    lp.reset_llm_breaker()
+    lp._trip_breaker("rejected", "http://a|m1")
+    assert lp.llm_unavailable_reason("http://a|m1") == "rejected"
+    assert lp.llm_unavailable_reason("http://b|m2") is None
+    lp.reset_llm_breaker()

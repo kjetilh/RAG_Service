@@ -21,7 +21,8 @@ def upsert_document(doc_id: str, title: str, author: str | None, year: int | Non
       title=EXCLUDED.title, author=EXCLUDED.author, year=EXCLUDED.year,
       source_type=EXCLUDED.source_type, content_hash=EXCLUDED.content_hash,
       publisher=EXCLUDED.publisher, url=EXCLUDED.url, language=EXCLUDED.language,
-      identifiers=EXCLUDED.identifiers, meta_sources=EXCLUDED.meta_sources, file_path=EXCLUDED.file_path
+      identifiers=EXCLUDED.identifiers, meta_sources=EXCLUDED.meta_sources, file_path=EXCLUDED.file_path,
+      updated_at=now()
     '''
     with engine().begin() as conn:
         conn.execute(text(sql), {

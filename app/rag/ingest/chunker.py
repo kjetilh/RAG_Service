@@ -60,6 +60,15 @@ def chunk_text_v1(doc_id: str, text: str, target_words: int = 350, overlap_words
     return chunks
 
 
+_fence_re = re.compile(r"^(```|~~~).*?^\1[^\n]*$", re.MULTILINE | re.DOTALL)
+
+
+def _heading_matches(text: str) -> list:
+    """Markdown headings, not `# comment` lines inside fenced code blocks."""
+    fenced = [(m.start(), m.end()) for m in _fence_re.finditer(text)]
+    return [m for m in _heading_re.finditer(text) if not any(a <= m.start() < b for a, b in fenced)]
+
+
 def _clean_heading(heading: str) -> str:
     return _tag_re.sub("", heading).strip()
 
@@ -113,7 +122,7 @@ def chunk_text_v2(
       under "Current limits" can be found by a question that names the document
     """
     title = (doc_title or "").replace("_", " ").strip()
-    matches = list(_heading_re.finditer(text))
+    matches = _heading_matches(text)
     sections: list[tuple[list[str], str]] = []
     if matches and text[:matches[0].start()].strip():
         sections.append(([], text[:matches[0].start()].strip()))

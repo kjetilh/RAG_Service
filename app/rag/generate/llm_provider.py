@@ -110,20 +110,27 @@ class LLMUnavailable(RuntimeError):
 # On 2026-10-08 an empty OpenAI account made every question wait ~95 s in
 # retries (query rewrite + answer) and then return HTTP 500, for two months.
 _BREAKER_SECONDS = 300.0
-_breaker: Dict[str, Any] = {"until": 0.0, "reason": ""}
+# Keyed by provider endpoint: one rejected key must not block other model profiles.
+_breaker: Dict[str, Dict[str, Any]] = {}
 
 
-def llm_unavailable_reason() -> Optional[str]:
-    return _breaker["reason"] if time.monotonic() < float(_breaker["until"]) else None
+def llm_unavailable_reason(key: Optional[str] = None) -> Optional[str]:
+    now = time.monotonic()
+    if key is not None:
+        b = _breaker.get(key)
+        return b["reason"] if b and now < float(b["until"]) else None
+    for b in _breaker.values():
+        if now < float(b["until"]):
+            return b["reason"]
+    return None
 
 
-def _trip_breaker(reason: str) -> None:
-    _breaker["until"] = time.monotonic() + _BREAKER_SECONDS
-    _breaker["reason"] = reason
+def _trip_breaker(reason: str, key: str = "") -> None:
+    _breaker[key] = {"until": time.monotonic() + _BREAKER_SECONDS, "reason": reason}
 
 
 def reset_llm_breaker() -> None:
-    _breaker["until"], _breaker["reason"] = 0.0, ""
+    _breaker.clear()
 
 
 def _non_retryable_reason(status_code: int, body: str) -> Optional[str]:
@@ -155,7 +162,8 @@ class OpenAICompatibleProvider(LLMProvider):
     ) -> requests.Response:
         last_exc: Optional[Exception] = None
 
-        blocked = llm_unavailable_reason()
+        breaker_key = f"{self.base_url}|{self.model}"
+        blocked = llm_unavailable_reason(breaker_key)
         if blocked:
             raise LLMUnavailable(blocked)
 
@@ -170,7 +178,7 @@ class OpenAICompatibleProvider(LLMProvider):
                 reason = _non_retryable_reason(r.status_code, getattr(r, "text", "") or "")
                 if reason:
                     print(f"[LLM] HTTP {r.status_code}, not retryable: {reason}")
-                    _trip_breaker(reason)
+                    _trip_breaker(reason, breaker_key)
                     raise LLMUnavailable(reason)
 
                 # Retryable statuses (rate limits + transient upstream)

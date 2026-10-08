@@ -1,4 +1,5 @@
 from __future__ import annotations
+import math
 from functools import lru_cache
 from typing import List
 from app.rag.retrieve.hybrid import RetrievedChunk
@@ -50,13 +51,15 @@ class CrossEncoderReranker(Reranker):
 
 
 def order_after_rerank(head: List[RetrievedChunk], scores: List[float], tail: List[RetrievedChunk]) -> List[RetrievedChunk]:
-    rescored = [RetrievedChunk(**{**c.__dict__, "score": float(s)}) for c, s in zip(head, scores)]
+    # Logits become (0, 1): same order, and score thresholds (evaluation gate) keep their meaning.
+    rescored = [RetrievedChunk(**{**c.__dict__, "score": 1.0 / (1.0 + math.exp(-max(-60.0, min(60.0, float(s)))))})
+                for c, s in zip(head, scores)]
     rescored.sort(key=lambda x: x.score, reverse=True)
     if not tail:
         return rescored
-    # The tail stays below the re-scored head whatever scale the model uses.
-    floor = min(x.score for x in rescored) - 1.0
-    return rescored + [RetrievedChunk(**{**t.__dict__, "score": floor - i * 1e-6}) for i, t in enumerate(tail)]
+    # The tail stays below the re-scored head, in its fused order, with positive scores.
+    floor = min(x.score for x in rescored) * 0.5
+    return rescored + [RetrievedChunk(**{**t.__dict__, "score": floor / (1.0 + i)}) for i, t in enumerate(tail)]
 
 
 @lru_cache(maxsize=2)

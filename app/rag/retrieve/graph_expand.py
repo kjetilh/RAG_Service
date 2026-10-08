@@ -135,6 +135,9 @@ def _best_chunks(doc_ids: list[str], query_emb, filters: dict | None):
     if filters and "source_type" in filters:
         where.append("d.source_type = ANY(:source_type)")
         params["source_type"] = filters["source_type"]
+    if filters and "year_gte" in filters:
+        where.append("d.year >= :year_gte")
+        params["year_gte"] = int(filters["year_gte"])
     sql = f"""
     SELECT DISTINCT ON (c.doc_id)
            c.chunk_id, c.doc_id, c.ordinal, d.title, d.author, d.year, d.source_type,
@@ -155,6 +158,8 @@ def linked_document_chunks(selected_doc_ids: list[str], query_emb, filters: dict
     from the first `graph_head` selected documents; at most `graph_add` rows."""
     if query_emb is None or not selected_doc_ids:
         return []
+    if filters and "doc_id" in filters:
+        return []  # the caller asked for specific documents; do not add others
     graph = get_graph()
     head = selected_doc_ids[: max(1, int(settings.graph_head))]
     present = set(selected_doc_ids)

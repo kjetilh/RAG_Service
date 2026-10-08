@@ -71,6 +71,7 @@ def select_with_linked_documents(candidates, top_k: int, max_chunks_per_doc: int
     except Exception as exc:  # the graph is an addition; it must never fail a request
         print(f"[graph] expansion skipped: {exc!r}")
         return base
+    rows = rows[: max(0, top_k - 1)]
     if not rows:
         return base
     kept = _select(candidates, max(1, top_k - len(rows)), max_chunks_per_doc)
