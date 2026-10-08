@@ -5,16 +5,21 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
+# Dependencies first, on placeholder packages: a code change then rebuilds in
+# seconds instead of reinstalling torch. The editable install points at /app,
+# so the real sources copied below are what runs.
 COPY pyproject.toml README.md /app/
+RUN mkdir -p app scripts && touch app/__init__.py scripts/__init__.py \
+ && pip install --no-cache-dir -U pip \
+ && pip install --no-cache-dir -e '.[pdf,docx,html]' \
+ && pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch==2.10.0 \
+ && pip install --no-cache-dir 'sentence-transformers>=3.0.0'
+
 COPY app /app/app
 COPY scripts /app/scripts
 COPY prompts /app/prompts
 COPY config /app/config
-
-RUN pip install --no-cache-dir -U pip \
- && pip install --no-cache-dir -e '.[pdf,docx,html]' \
- && pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch==2.10.0 \
- && pip install --no-cache-dir 'sentence-transformers>=3.0.0'
+COPY eval /app/eval
 
 EXPOSE 8000
 
