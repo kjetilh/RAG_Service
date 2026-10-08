@@ -37,7 +37,8 @@ test the harness itself.
 
 ## Results (2026-10-08)
 
-Corpus: the public repositories at `origin/main` that day (607 markdown files).
+Corpus: the public repositories at `origin/main` that day (607 markdown files),
+with the Book and CellProtocol docs taken from the working tree the questions were written from.
 
 Harness, same corpus and questions for every row. `no`/`en` = `doc@5` for the Norwegian and English questions.
 
@@ -66,7 +67,13 @@ nothing (40.2), BM25 + RRF on v1 chunks gives 59.8.
 The running service, measured through its own retrieval code and over HTTPS
 (`POST /v1/cases/dimy_docs/retrieve`), all 108 questions:
 
-LIVE_TABLE
+| | doc@1 | doc@5 | doc@12 | MRR | no | en | sec/question |
+|---|---|---|---|---|---|---|---|
+| Before (2026-10-07; index of 723 documents, 31 of the 108 answers in it) | 7.4 | 8.3 | 9.3 | 0.078 | 1.9 | 14.8 | 0.15 |
+| ... only the 31 answerable questions | 25.8 | 29.0 | 32.3 | 0.272 | | | |
+| After the switch, without re-ranking | 39.8 | 75.0 | 85.2 | 0.540 | 64.8 | 85.2 | 0.2 |
+| After, with re-ranking (20 candidates), as it runs now | 64.8 | 86.1 | 90.7 | 0.723 | 81.5 | 90.7 | 2.9 |
+| ... only the 102 answerable questions | 68.6 | 90.2 | 95.1 | 0.763 | | | |
 
 Six of the 108 questions have their answer in a chapter that is not on
 `origin/main` (Book 33, 34 and 36 Agent Trust Package), so the service cannot
@@ -83,6 +90,7 @@ questions were written from.
 | `HYBRID_FUSION` | `rrf` | With "largest raw score wins", a lexical score can never beat a cosine score. |
 | `EMBEDDING_MODEL` | `paraphrase-multilingual-MiniLM-L12-v2` | all-MiniLM-L6-v2 is English-only: Norwegian questions found the right document in the top 5 in 11 % of the cases. Same vector size (384), so no schema change. |
 | `VECTOR_EXACT_SEARCH` | `true` (default) | ivfflat with `probes=1` scans about 1 % of the vectors and filters afterwards. |
+| `RERANKER_ENABLED` | `true`, 20 candidates, `cross-encoder/mmarco-mMiniLMv2-L12-H384-v1` | The right document first: 40 % -> 65 % on the running service. Costs about 3 seconds per question on two threads. One re-ranking runs at a time; a request that arrives meanwhile gets the fused ranking at once (`retrieval_debug.rerank = "skipped_busy"`). A client that wants the fast path sends `"rerank": false`. |
 | `DOC_ID_SCHEME` | `v2` | v1 ids collide for same-name, same-content files in two folders; sync then moved the row back and forth every 30 minutes and tombstoned Book chapters. |
 
 `EMBEDDING_MODEL`, `CHUNKER_VERSION` and `DOC_ID_SCHEME` are properties of an
