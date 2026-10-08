@@ -137,7 +137,10 @@ services:
       GRAPH_MODE: ${RAG_DIMY_GRAPH_MODE:-off}
       RERANKER_ENABLED: ${RAG_DIMY_RERANKER_ENABLED:-false}
       RERANKER_MODEL: ${RAG_DIMY_RERANKER_MODEL:-cross-encoder/ms-marco-MiniLM-L-6-v2}
-      RERANKER_TOP_N: ${RAG_DIMY_RERANKER_TOP_N:-30}
+      RERANKER_TOP_N: ${RAG_DIMY_RERANKER_TOP_N:-20}
+      # One re-ranking at a time, on two threads: the endpoint is public and shares the host.
+      OMP_NUM_THREADS: ${RAG_DIMY_OMP_NUM_THREADS:-2}
+      TOKENIZERS_PARALLELISM: 'false'
       HF_HOME: /root/.cache/huggingface
     depends_on:
       rag_dimy_db:

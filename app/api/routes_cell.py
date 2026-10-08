@@ -507,6 +507,7 @@ def cell_retrieve(case_id: str, req: RetrieveRequest, identity: CellIdentity = D
             prompt_profile_case_id=req.prompt_profile_case_id,
             rewrite_query=req.rewrite_query,
             max_context_chars=req.max_context_chars,
+            rerank=req.rerank,
         )
     except ModelProfileError as e:
         raise HTTPException(status_code=400, detail=str(e))

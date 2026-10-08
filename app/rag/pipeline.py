@@ -278,6 +278,7 @@ def _retrieve_candidates(
     model_profile: str | None,
     rewrite_query: bool,
     effective_top_k: int,
+    rerank: bool | None = None,
 ) -> tuple[list[RetrievedChunk], str]:
     effective_query = rewrite_query_if_enabled(query, model_profile=model_profile) if rewrite_query else query
     embedder = default_embedder()
@@ -292,16 +293,40 @@ def _retrieve_candidates(
         filters=_map_filters(filters),
     )
 
-    if settings.reranker_enabled:
-        reranker = default_reranker()
-        candidates = reranker.rerank(query, candidates)
+    candidates, rerank_status = _maybe_rerank(query, candidates, rerank)
 
     # pack_context may add linked documents (GRAPH_MODE=expand); it needs the
     # query vector and the filters that produced these candidates.
     carried = CandidateList(candidates)
     carried.query_emb = query_emb
     carried.filters = _map_filters(filters)
+    carried.rerank_status = rerank_status
     return carried, effective_query
+
+
+# Re-ranking is the only CPU-heavy step of a request (seconds). The endpoint is
+# public, so it must not be possible to keep every core busy by asking many
+# questions at once: at most RERANKER_MAX_CONCURRENT re-rankings run, and a
+# request that finds them taken gets the fused ranking instead of waiting.
+_RERANK_SEM = Semaphore(max(1, int(getattr(settings, "reranker_max_concurrent", 1))))
+
+
+def _maybe_rerank(query: str, candidates: list, rerank: bool | None) -> tuple[list, str]:
+    if not settings.reranker_enabled:
+        return candidates, "off"
+    if rerank is False:
+        return candidates, "skipped_by_request"
+    if not candidates:
+        return candidates, "no_candidates"
+    if not _RERANK_SEM.acquire(blocking=False):
+        return candidates, "skipped_busy"
+    try:
+        return default_reranker().rerank(query, candidates), "applied"
+    except Exception as exc:  # a missing model must not fail retrieval
+        print(f"[rerank] skipped: {exc!r}")
+        return candidates, "skipped_error"
+    finally:
+        _RERANK_SEM.release()
 
 
 def _sources_only_answer(citations: list[Citation], reason: str, limit: int = 6) -> str:
@@ -1516,6 +1541,7 @@ def retrieve_context(
     prompt_profile_case_id: Optional[str] = None,
     rewrite_query: Optional[bool] = None,
     max_context_chars: Optional[int] = None,
+    rerank: Optional[bool] = None,
 ) -> RetrieveResponse:
     del conversation_id  # Reserved for future conversation-aware retrieval.
     filters = filters or {}
@@ -1533,6 +1559,7 @@ def retrieve_context(
         model_profile=model_profile,
         rewrite_query=bool(rewrite_query),
         effective_top_k=effective_top_k,
+        rerank=rerank,
     )
     packed = pack_context(
         candidates,
@@ -1541,6 +1568,7 @@ def retrieve_context(
     )
     if packed.debug is None:
         packed.debug = {}
+    packed.debug["rerank"] = getattr(candidates, "rerank_status", "off")
 
     prompt_case_id = _prompt_case_id(plan, prompt_profile_case_id)
     prompt_system_path, prompt_answer_path, prompt_system_source, prompt_answer_source = resolve_effective_paths(

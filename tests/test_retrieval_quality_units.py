@@ -221,3 +221,33 @@ def test_reranker_model_is_loaded_once(monkeypatch):
     a, b = rr.default_reranker(), rr.default_reranker()
     assert a is b and len(made) == 1
     rr._cached_reranker.cache_clear()
+
+
+def test_rerank_is_bounded_and_can_be_skipped(monkeypatch):
+    from app.rag import pipeline
+
+    class Fake:
+        def rerank(self, query, chunks):
+            return list(reversed(chunks))
+
+    monkeypatch.setattr(pipeline, "default_reranker", lambda: Fake())
+    monkeypatch.setattr(pipeline.settings, "reranker_enabled", False)
+    assert pipeline._maybe_rerank("q", [1, 2], None) == ([1, 2], "off")
+    monkeypatch.setattr(pipeline.settings, "reranker_enabled", True)
+    assert pipeline._maybe_rerank("q", [1, 2], None) == ([2, 1], "applied")
+    assert pipeline._maybe_rerank("q", [1, 2], False) == ([1, 2], "skipped_by_request")
+    # a second request while one re-ranking runs gets the fused ranking, it does not queue
+    assert pipeline._RERANK_SEM.acquire(blocking=False)
+    try:
+        assert pipeline._maybe_rerank("q", [1, 2], None) == ([1, 2], "skipped_busy")
+    finally:
+        pipeline._RERANK_SEM.release()
+
+    class Broken:
+        def rerank(self, query, chunks):
+            raise RuntimeError("model missing")
+
+    monkeypatch.setattr(pipeline, "default_reranker", lambda: Broken())
+    assert pipeline._maybe_rerank("q", [1, 2], None) == ([1, 2], "skipped_error")
+    assert pipeline._RERANK_SEM.acquire(blocking=False), "the slot must be released after an error"
+    pipeline._RERANK_SEM.release()

@@ -133,6 +133,7 @@ def _run_retrieve(req: RetrieveRequest):
         prompt_profile_case_id=req.prompt_profile_case_id,
         rewrite_query=req.rewrite_query,
         max_context_chars=req.max_context_chars,
+        rerank=req.rerank,
     )
 
 
@@ -185,6 +186,7 @@ def public_case_retrieve(case_id: str, req: RetrieveRequest):
             prompt_profile_case_id=req.prompt_profile_case_id,
             rewrite_query=req.rewrite_query,
             max_context_chars=req.max_context_chars,
+            rerank=req.rerank,
         )
         return _run_retrieve(retrieve_req)
     except ModelProfileError as e:

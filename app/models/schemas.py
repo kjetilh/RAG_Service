@@ -31,6 +31,8 @@ class RetrieveRequest(BaseModel):
     prompt_profile_case_id: Optional[str] = Field(default=None, min_length=1, max_length=80)
     rewrite_query: Optional[bool] = None
     max_context_chars: Optional[int] = Field(default=None, ge=1, le=200000)
+    # false = skip the cross-encoder for this request (fast path); None/true = use it when enabled.
+    rerank: Optional[bool] = None
 
 class Citation(BaseModel):
     doc_id: str
