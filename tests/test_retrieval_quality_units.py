@@ -196,3 +196,28 @@ def test_reserved_slots_never_move_the_ranking_above_them(monkeypatch):
         raise RuntimeError("db down")
     monkeypatch.setattr(graph_expand, "linked_document_chunks", boom)
     assert [c.chunk_id for c in pc.pack_context(cands, top_k=6, max_chunks_per_doc=3).citations] == plain
+
+
+def test_rerank_reads_title_and_heading_path_and_keeps_tail_below():
+    from app.rag.retrieve import rerank as rr
+    mk = lambda cid, score, sp=None: hybrid_mod.RetrievedChunk(cid, "d", 0, "15_Doc_Title", None, None, "docs", None, None, None, None, "body", score, "vector", sp)
+    assert rr.rerank_text(mk("a", 1.0, "Limits > Current")) == "15 Doc Title > Limits > Current\nbody"
+    out = rr.order_after_rerank([mk("a", 0.9), mk("b", 0.8)], [-3.0, 5.0], [mk("t1", 0.7), mk("t2", 0.6)])
+    assert [c.chunk_id for c in out] == ["b", "a", "t1", "t2"]
+    assert out[2].score < out[1].score and out[3].score < out[2].score
+
+
+def test_reranker_model_is_loaded_once(monkeypatch):
+    from app.rag.retrieve import rerank as rr
+    made = []
+
+    class Fake(rr.Reranker):
+        def __init__(self, name):
+            made.append(name)
+
+    rr._cached_reranker.cache_clear()
+    monkeypatch.setattr(rr, "CrossEncoderReranker", Fake)
+    monkeypatch.setattr(rr.settings, "reranker_enabled", True)
+    a, b = rr.default_reranker(), rr.default_reranker()
+    assert a is b and len(made) == 1
+    rr._cached_reranker.cache_clear()

@@ -89,6 +89,7 @@ class Settings(BaseSettings):
     graph_fan: int = 4
     graph_add: int = 2
     reranker_top_n: int = 30
+    reranker_max_length: int = 384
 
 
 settings = Settings()

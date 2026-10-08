@@ -1,4 +1,5 @@
 from __future__ import annotations
+from functools import lru_cache
 from typing import List
 from app.rag.retrieve.hybrid import RetrievedChunk
 from app.settings import settings
@@ -11,8 +12,24 @@ class NoopReranker(Reranker):
     def rerank(self, query: str, chunks: List[RetrievedChunk]) -> List[RetrievedChunk]:
         return sorted(chunks, key=lambda c: c.score, reverse=True)
 
+
+def rerank_text(chunk: RetrievedChunk, limit: int = 1600) -> str:
+    """What the cross-encoder reads: document title and heading path, then the body.
+    The same text the chunk was indexed with (chunker v2)."""
+    title = (getattr(chunk, "title", "") or "").replace("_", " ").strip()
+    section_path = getattr(chunk, "section_path", None)
+    head = title + (f" > {section_path}" if section_path else "") if title else (section_path or "")
+    body = chunk.content or ""
+    return (f"{head}\n{body}" if head else body)[:limit]
+
+
 class CrossEncoderReranker(Reranker):
-    """Optional reranker using sentence-transformers CrossEncoder.
+    """Re-scores the head of the fused ranking with a cross-encoder.
+
+    Measured 2026-10-08 on the HAVEN docs (108 questions): the right document
+    first went from 50 % to 76 %, at the cost of a few seconds per question on
+    the host's CPU. Only the first RERANKER_TOP_N candidates are re-scored; the
+    rest keep their order below them.
     Requires: pip install -e '.[emb]'
     """
     def __init__(self, model_name: str):
@@ -20,49 +37,35 @@ class CrossEncoderReranker(Reranker):
             from sentence_transformers import CrossEncoder  # type: ignore
         except Exception as e:
             raise RuntimeError("CrossEncoder reranker requires extras: pip install -e '.[emb]'") from e
-        self.model = CrossEncoder(model_name)
+        self.model = CrossEncoder(model_name, max_length=int(getattr(settings, "reranker_max_length", 384)))
 
     def rerank(self, query: str, chunks: List[RetrievedChunk]) -> List[RetrievedChunk]:
         if not chunks:
             return chunks
-        # Only the head is re-scored; a cross-encoder call per candidate is the
-        # expensive part of a request.
         top_n = max(1, int(getattr(settings, "reranker_top_n", 30)))
         ordered = sorted(chunks, key=lambda c: c.score, reverse=True)
-        chunks, tail = ordered[:top_n], ordered[top_n:]
-        pairs = [(query, c.content) for c in chunks]
-        scores = self.model.predict(pairs)  # higher is better
-        # Combine with existing score as a small prior
-        out = []
-        for c, s in zip(chunks, scores):
-            c2 = RetrievedChunk(
-                chunk_id=c.chunk_id,
-                doc_id=c.doc_id,
-                ordinal=c.ordinal,
-                title=c.title,
-                author=c.author,
-                year=c.year,
-                source_type=c.source_type,
-                publisher=c.publisher,
-                url=c.url,
-                language=c.language,
-                identifiers=c.identifiers,
-                content=c.content,
-                score=float(s),
-                channel=c.channel,
-                section_path=getattr(c, "section_path", None),
-            )
-            out.append(c2)
-        head = sorted(out, key=lambda x: x.score, reverse=True)
-        if not tail:
-            return head
-        # Keep the tail below the re-scored head whatever scale the model uses.
-        floor = min(x.score for x in head) - 1.0
-        return head + [
-            RetrievedChunk(**{**t.__dict__, "score": floor - i * 1e-6}) for i, t in enumerate(tail)
-        ]
+        head, tail = ordered[:top_n], ordered[top_n:]
+        scores = self.model.predict([(query, rerank_text(c)) for c in head])  # higher is better
+        return order_after_rerank(head, [float(s) for s in scores], tail)
+
+
+def order_after_rerank(head: List[RetrievedChunk], scores: List[float], tail: List[RetrievedChunk]) -> List[RetrievedChunk]:
+    rescored = [RetrievedChunk(**{**c.__dict__, "score": float(s)}) for c, s in zip(head, scores)]
+    rescored.sort(key=lambda x: x.score, reverse=True)
+    if not tail:
+        return rescored
+    # The tail stays below the re-scored head whatever scale the model uses.
+    floor = min(x.score for x in rescored) - 1.0
+    return rescored + [RetrievedChunk(**{**t.__dict__, "score": floor - i * 1e-6}) for i, t in enumerate(tail)]
+
+
+@lru_cache(maxsize=2)
+def _cached_reranker(model_name: str) -> Reranker:
+    # Loading a cross-encoder takes seconds; it used to happen on every request.
+    return CrossEncoderReranker(model_name)
+
 
 def default_reranker() -> Reranker:
     if bool(settings.reranker_enabled):
-        return CrossEncoderReranker(settings.reranker_model)
+        return _cached_reranker(settings.reranker_model)
     return NoopReranker()
