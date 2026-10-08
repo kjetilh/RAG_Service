@@ -141,6 +141,8 @@ services:
       # One re-ranking at a time, on two threads: the endpoint is public and shares the host.
       OMP_NUM_THREADS: ${RAG_DIMY_OMP_NUM_THREADS:-2}
       TOKENIZERS_PARALLELISM: 'false'
+      WARM_UP_ON_START: ${RAG_DIMY_WARM_UP_ON_START:-true}
+      HF_HUB_OFFLINE: ${RAG_DIMY_HF_HUB_OFFLINE:-1}
       HF_HOME: /root/.cache/huggingface
     depends_on:
       rag_dimy_db:

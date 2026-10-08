@@ -101,8 +101,9 @@ def chunk_text_v2(
 ) -> list[Chunk]:
     """Heading-path aware chunking.
 
-    What it fixes, compared with v1 (measured 2026-10-08 on the HAVEN docs, where
-    v1 gave chunks of 20-34 words on average, thousands of them under 20 words):
+    What it fixes, compared with v1 (measured 2026-10-08 on the HAVEN docs: with
+    everything else equal, document-hit@5 was 77.6 % without the title/heading
+    context and 86.0 % with it):
 
     - the heading hierarchy is tracked: section_path is "H2 > H3", not one title
     - text before the first heading is kept (v1 dropped it)

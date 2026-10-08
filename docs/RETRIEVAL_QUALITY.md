@@ -39,13 +39,46 @@ test the harness itself.
 
 Corpus: the public repositories at `origin/main` that day (607 markdown files).
 
-RESULTS_TABLE
+Harness, same corpus and questions for every row. `no`/`en` = `doc@5` for the Norwegian and English questions.
+
+| Variant | doc@1 | doc@5 | doc@12 | MRR | ans@12 | no | en | mh_all |
+|---|---|---|---|---|---|---|---|---|
+| Deployed logic until 2026-10-08 (v1 chunks, all-MiniLM, AND-lexical, max fusion) | 29.9 | 44.9 | 50.5 | 0.366 | 41.1 | 11.1 | 79.2 | 18.8 |
+| **v2 chunks + multilingual MiniLM + BM25 + RRF** | 49.5 | 86.0 | 93.5 | 0.632 | 83.2 | 75.9 | 96.2 | 62.5 |
+| **... + cross-encoder re-ranking (30 candidates)** | 75.7 | 89.7 | 95.3 | 0.821 | 84.1 | 85.2 | 94.3 | 75.0 |
+| ... without title/heading context in the indexed text | 43.9 | 77.6 | 91.6 | 0.585 | 78.5 | 64.8 | 90.6 | 62.5 |
+| ... smaller chunks (target 140 words) | 43.9 | 83.2 | 92.5 | 0.605 | 86.0 | 74.1 | 92.5 | 68.8 |
+| ... larger chunks (target 320 words) | 47.7 | 75.7 | 89.7 | 0.589 | 83.2 | 63.0 | 88.7 | 68.8 |
+| ... multilingual-e5-small instead (5x slower to index) | 47.7 | 70.1 | 81.3 | 0.569 | 76.6 | 46.3 | 94.3 | 50.0 |
+| ... lexical weight 1.5 | 50.5 | 80.4 | 84.1 | 0.621 | 78.5 | 64.8 | 96.2 | 56.2 |
+| ... vector weight 1.5 | 48.6 | 77.6 | 84.1 | 0.605 | 71.0 | 70.4 | 84.9 | 37.5 |
+| ... 100 candidates per channel | 50.5 | 77.6 | 90.7 | 0.619 | 80.4 | 64.8 | 90.6 | 62.5 |
+| ... max 2 chunks per document | 49.5 | 86.0 | 95.3 | 0.634 | 83.2 | 75.9 | 96.2 | 62.5 |
+| ... link graph, reserved slots (2) | 49.5 | 86.0 | 90.7 | 0.629 | 81.3 | 75.9 | 96.2 | 68.8 |
+| ... link graph, reserved slots (1) | 49.5 | 86.0 | 92.5 | 0.631 | 82.2 | 75.9 | 96.2 | 68.8 |
+| ... link + shared-symbol graph, reserved slots (2) | 49.5 | 86.0 | 92.5 | 0.631 | 82.2 | 75.9 | 96.2 | 75.0 |
+| ... link graph as a third ranking (personalised PageRank) | 47.7 | 76.6 | 90.7 | 0.611 | 77.6 | 68.5 | 84.9 | 62.5 |
+
+On the larger corpus that also holds the private repositories (1341 files) the
+order is the same: 40.2 -> 81.3 for `doc@5`; RRF alone (still AND-lexical) changes
+nothing (40.2), BM25 + RRF on v1 chunks gives 59.8.
+
+The running service, measured through its own retrieval code and over HTTPS
+(`POST /v1/cases/dimy_docs/retrieve`), all 108 questions:
+
+LIVE_TABLE
+
+Six of the 108 questions have their answer in a chapter that is not on
+`origin/main` (Book 33, 34 and 36 Agent Trust Package), so the service cannot
+find them; "answerable" leaves those out. The harness numbers above are higher
+than the live ones because the harness corpus used the working tree the
+questions were written from.
 
 ## What is switched on for the documentation RAG
 
 | Setting | Value | Why |
 |---|---|---|
-| `CHUNKER_VERSION` | `v2` | v1 produced chunks of 20-34 words on average and dropped the text before the first heading. v2 keeps the heading path, merges small sections and indexes `title > heading path` with the body. |
+| `CHUNKER_VERSION` | `v2` | v1 keeps only the nearest heading, drops the text before the first heading and makes one chunk per section however small. v2 keeps the heading path, merges small sections and indexes `title > heading path` with the body. Indexing that context alone is worth 8 points of `doc@5` (77.6 -> 86.0). |
 | `LEXICAL_MODE` | `bm25` | The Postgres `plainto_tsquery` channel ANDs every word of the question; for natural-language questions it returned nothing. |
 | `HYBRID_FUSION` | `rrf` | With "largest raw score wins", a lexical score can never beat a cosine score. |
 | `EMBEDDING_MODEL` | `paraphrase-multilingual-MiniLM-L12-v2` | all-MiniLM-L6-v2 is English-only: Norwegian questions found the right document in the top 5 in 11 % of the cases. Same vector size (384), so no schema change. |
@@ -57,10 +90,20 @@ index. Changing one means building a new database and switching to it.
 
 ## Measured and NOT switched on
 
-GRAPH_SECTION
+- Link graph in combination with the hybrid ranking (`GRAPH_MODE=expand`, code in
+  `app/rag/retrieve/graph_expand.py`). Three uses were measured:
+  - as a third ranking (personalised PageRank from the top documents): worse on
+    every measure (`doc@5` 86.0 -> 76.6);
+  - reserved slots for documents linked from the top documents: `doc@5` is
+    unchanged by construction; of 16 multi-hop questions one or two more get both
+    documents (62.5 -> 68.8 / 75.0), and one to three of the 108 questions lose
+    their document from the top 12 (93.5 -> 90.7 / 92.5);
+  - with re-ranking on, the reserved slots changed nothing.
+  That is too small and too mixed to switch on. What limits it is the
+  documentation, not the code: the public corpus has 835 link edges over 607
+  files, and whole chapters are not linked from anywhere (see
+  `HAVEN-Deploy/_handoff/RAG/DOK-FUNN-20261008.md`, section 5).
 
-- Cross-encoder re-ranking: see the table. It costs seconds per question on the
-  host's CPU.
 - RRF weights (1.5x lexical or 1.5x vector), 100 candidates per channel instead
   of 50: all lower `doc@5`.
 

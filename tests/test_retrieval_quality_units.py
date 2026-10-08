@@ -251,3 +251,12 @@ def test_rerank_is_bounded_and_can_be_skipped(monkeypatch):
     assert pipeline._maybe_rerank("q", [1, 2], None) == ([1, 2], "skipped_error")
     assert pipeline._RERANK_SEM.acquire(blocking=False), "the slot must be released after an error"
     pipeline._RERANK_SEM.release()
+
+
+def test_retrieval_config_route_exposes_settings_but_no_secrets():
+    from fastapi.testclient import TestClient
+    from app.main import app
+    body = TestClient(app).get("/v1/retrieval/config").json()
+    assert {"embedding_model", "chunker_version", "hybrid_fusion", "lexical_mode", "reranker_enabled", "warm_up"} <= set(body)
+    text = str(body).lower()
+    assert "api_key" not in text and "database_url" not in text and "secret" not in text
