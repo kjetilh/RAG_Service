@@ -59,5 +59,40 @@ class Settings(BaseSettings):
     sync_tombstone_grace_seconds: int = 900
     sync_anti_thrash_batch_size: int = 200
 
+    # --- Retrieval quality (2026-10-08). Defaults keep the previous behaviour;
+    # the documentation RAG turns these on through its environment. Every value
+    # here was measured with scripts/eval_retrieval.py before it was enabled.
+    # v1: split on headings, body only. v2: heading-path aware, small sections
+    # merged, document title + heading path indexed with the body.
+    chunker_version: str = "v1"
+    # v1: "<stem>-<hash(content)>" (two files with the same name and content
+    # collide and make sync flip-flop). v2 includes the file path.
+    doc_id_scheme: str = "v1"
+    # max: best raw score per chunk (lexical scores never win over cosine).
+    # rrf: reciprocal rank fusion of the vector and lexical rankings.
+    hybrid_fusion: str = "max"
+    rrf_k: int = 60
+    # and: plainto_tsquery (every query word must be in the chunk).
+    # bm25: in-process BM25 over the indexed chunk text, OR semantics.
+    lexical_mode: str = "and"
+    # E5-style models need "query: " / "passage: " prefixes.
+    embedding_query_prefix: str = ""
+    embedding_passage_prefix: str = ""
+    # ivfflat with the default probes=1 scans about 1 % of the vectors; for
+    # corpora of this size an exact scan is both fast and correct.
+    vector_exact_search: bool = True
+    # off | expand: the best chunk of documents linked from the top documents
+    # takes the last graph_add places of the context (reserved slots); the
+    # ranking above them is not changed. See app/rag/retrieve/graph_expand.py.
+    graph_mode: str = "off"
+    graph_head: int = 4
+    graph_fan: int = 4
+    graph_add: int = 2
+    reranker_top_n: int = 30
+    reranker_max_length: int = 384
+    reranker_max_concurrent: int = 1
+    # Load models and the BM25 index in the background at start-up.
+    warm_up_on_start: bool = False
+
 
 settings = Settings()

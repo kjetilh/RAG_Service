@@ -140,3 +140,28 @@ def test_answer_question_returns_not_documented_when_no_citations(monkeypatch):
     assert "Ikke dokumentert i kildene." in resp.answer
     assert resp.citations == []
     assert resp.retrieval_debug["evaluation_gate"]["passed"] is False
+
+
+def test_answer_question_returns_sources_when_llm_has_no_credits(monkeypatch):
+    """An empty language-model account must not turn a working retrieval into HTTP 500."""
+    from app.rag.generate.llm_provider import LLMUnavailable
+
+    def _no_credits(*args, **kwargs):
+        raise LLMUnavailable("The language model account has no credits left (insufficient_quota).")
+
+    monkeypatch.setattr(pipeline, "plan_query", lambda *args, **kwargs: _plan(enforce=True, min_citations=1))
+    monkeypatch.setattr(pipeline, "rewrite_query_if_enabled", lambda *args, **kwargs: "q")
+    monkeypatch.setattr(pipeline, "default_embedder", lambda: _FakeEmbedder())
+    monkeypatch.setattr(pipeline, "hybrid_retrieve", lambda *args, **kwargs: [_candidate()])
+    monkeypatch.setattr(pipeline, "compose_answer", _no_credits)
+    monkeypatch.setattr(
+        pipeline,
+        "resolve_effective_paths",
+        lambda case_id=None: (f"persona:{case_id}", f"template:{case_id}", "case", "case"),
+    )
+
+    resp = pipeline.answer_question("hei")
+    assert [c.chunk_id for c in resp.citations] == ["c1"]
+    assert resp.retrieval_debug["generation_skipped"] is True
+    assert "insufficient_quota" in resp.retrieval_debug["generation_error"]
+    assert "ikke formulert" in resp.answer

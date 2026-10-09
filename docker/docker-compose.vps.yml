@@ -108,11 +108,12 @@ services:
       LLM_API_KEY: ${RAG_DIMY_LLM_API_KEY:-}
       LLM_MODEL: ${RAG_DIMY_LLM_MODEL:-gpt-4o-mini}
       LLM_PROFILES_JSON: ${RAG_DIMY_LLM_PROFILES_JSON:-}
+      NEXT_GEN_RAG_ENABLED: ${RAG_DIMY_NEXT_GEN_RAG_ENABLED:-true}
       SYSTEM_PERSONA_PATH: ${RAG_DIMY_SYSTEM_PERSONA_PATH:-/app/prompts/system_persona_dimy.md}
       ANSWER_TEMPLATE_PATH: ${RAG_DIMY_ANSWER_TEMPLATE_PATH:-/app/prompts/answer_template_dimy.md}
       INSTANCE_CASE_IDS_JSON: '${RAG_DIMY_INSTANCE_CASE_IDS_JSON:-}'
       QUERY_ROUTER_ENABLED: '${RAG_DIMY_QUERY_ROUTER_ENABLED:-true}'
-      QUERY_ROUTER_DOCS_SOURCE_TYPES_JSON: '${RAG_DIMY_QUERY_ROUTER_DOCS_SOURCE_TYPES_JSON:-["haven_docs","cellprotocol_docs"]}'
+      QUERY_ROUTER_DOCS_SOURCE_TYPES_JSON: '${RAG_DIMY_QUERY_ROUTER_DOCS_SOURCE_TYPES_JSON:-["haven_docs","cellprotocol_docs","cellscaffold_internal_docs","dimy_private_dev_docs"]}'
       QUERY_ROUTER_PROMPTS_SOURCE_TYPES_JSON: '${RAG_DIMY_QUERY_ROUTER_PROMPTS_SOURCE_TYPES_JSON:-["dimy_prompts","prompt_docs"]}'
       QUERY_ROUTER_DOCS_KEYWORDS_JSON: '${RAG_DIMY_QUERY_ROUTER_DOCS_KEYWORDS_JSON:-["api","endpoint","kode","code","implementasjon","implementation","arkitektur","architecture","database","postgres","docker","deploy","sync","ingest","test","feil","error","bug"]}'
       QUERY_ROUTER_PROMPTS_KEYWORDS_JSON: '${RAG_DIMY_QUERY_ROUTER_PROMPTS_KEYWORDS_JSON:-["prompt","prompts","promptmal","system prompt","systeminstruksjon","instruksjon","instruction","template","mal","policy","agent"]}'
@@ -124,6 +125,25 @@ services:
       CELL_GATEWAY_SHARED_SECRET: '${RAG_DIMY_CELL_GATEWAY_SHARED_SECRET:-}'
       CELL_OWNER_USER_IDS_JSON: '${RAG_DIMY_CELL_OWNER_USER_IDS_JSON:-[]}'
       INGEST_ROOT: /data/uploads
+      # Retrieval quality (see docs/RETRIEVAL_QUALITY.md). Changing EMBEDDING_MODEL,
+      # CHUNKER_VERSION or DOC_ID_SCHEME requires a rebuilt index (new database).
+      EMBEDDING_MODEL: ${RAG_DIMY_EMBEDDING_MODEL:-sentence-transformers/all-MiniLM-L6-v2}
+      EMBEDDING_QUERY_PREFIX: '${RAG_DIMY_EMBEDDING_QUERY_PREFIX:-}'
+      EMBEDDING_PASSAGE_PREFIX: '${RAG_DIMY_EMBEDDING_PASSAGE_PREFIX:-}'
+      CHUNKER_VERSION: ${RAG_DIMY_CHUNKER_VERSION:-v1}
+      DOC_ID_SCHEME: ${RAG_DIMY_DOC_ID_SCHEME:-v1}
+      HYBRID_FUSION: ${RAG_DIMY_HYBRID_FUSION:-max}
+      LEXICAL_MODE: ${RAG_DIMY_LEXICAL_MODE:-and}
+      GRAPH_MODE: ${RAG_DIMY_GRAPH_MODE:-off}
+      RERANKER_ENABLED: ${RAG_DIMY_RERANKER_ENABLED:-false}
+      RERANKER_MODEL: ${RAG_DIMY_RERANKER_MODEL:-cross-encoder/ms-marco-MiniLM-L-6-v2}
+      RERANKER_TOP_N: ${RAG_DIMY_RERANKER_TOP_N:-20}
+      # One re-ranking at a time, on two threads: the endpoint is public and shares the host.
+      OMP_NUM_THREADS: ${RAG_DIMY_OMP_NUM_THREADS:-2}
+      TOKENIZERS_PARALLELISM: 'false'
+      WARM_UP_ON_START: ${RAG_DIMY_WARM_UP_ON_START:-true}
+      HF_HUB_OFFLINE: ${RAG_DIMY_HF_HUB_OFFLINE:-1}
+      HF_HOME: /root/.cache/huggingface
     depends_on:
       rag_dimy_db:
         condition: service_healthy
@@ -131,6 +151,8 @@ services:
       - "127.0.0.1:${RAG_DIMY_API_PORT:-8102}:8000"
     volumes:
       - ${RAG_DIMY_UPLOADS_DIR:-../uploads/dimy}:/data/uploads
+      # Model files survive a container recreate, so a start does not depend on huggingface.co.
+      - ${RAG_HF_CACHE_DIR:-../hf_cache}:/root/.cache/huggingface
     command:
       - /bin/sh
       - -c

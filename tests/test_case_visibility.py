@@ -64,7 +64,10 @@ def test_chat_list_cases_respects_allowlist(monkeypatch):
 
     resp = routes_chat.list_cases()
 
-    assert resp == {"cases": [{"case_id": "innovasjon", "description": "Innovasjon", "enabled": True}]}
+    assert len(resp["cases"]) == 1
+    assert resp["cases"][0]["case_id"] == "innovasjon"
+    assert resp["cases"][0]["description"] == "Innovasjon"
+    assert resp["cases"][0]["enabled"] is True
 
 
 def test_chat_query_rejects_case_not_available_on_instance(monkeypatch):

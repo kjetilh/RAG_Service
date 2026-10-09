@@ -8,16 +8,16 @@ from threading import Semaphore
 from sqlalchemy import text
 
 from app.settings import settings
-from app.models.schemas import ChatResponse, Citation
+from app.models.schemas import ChatResponse, Citation, RetrieveResponse
 from app.rag.index.db import engine
 from app.rag.index.embedder import default_embedder
 from app.rag.retrieve.hybrid import RetrievedChunk, hybrid_retrieve
 from app.rag.planner.answer_modes import sanitize_text_without_citations, trim_excerpt
 from app.rag.planner.deterministic import PlanResult, plan_query
 from app.rag.retrieve.rerank import default_reranker
-from app.rag.retrieve.pack_context import pack_context
+from app.rag.retrieve.pack_context import CandidateList, pack_context
 from app.rag.generate.composer import compose_answer, rewrite_query_if_enabled
-from app.rag.generate.llm_provider import LLMMessage, default_provider
+from app.rag.generate.llm_provider import LLMMessage, LLMUnavailable, default_provider
 from app.rag.generate.prompt_config_store import resolve_effective_paths
 from app.rag.interviews.collective import prepare_question_set
 from app.rag.eval.gate import run_evaluation_gate
@@ -278,10 +278,12 @@ def _retrieve_candidates(
     model_profile: str | None,
     rewrite_query: bool,
     effective_top_k: int,
+    rerank: bool | None = None,
 ) -> tuple[list[RetrievedChunk], str]:
     effective_query = rewrite_query_if_enabled(query, model_profile=model_profile) if rewrite_query else query
     embedder = default_embedder()
-    query_emb = embedder.embed(effective_query)
+    embed_query = getattr(embedder, "embed_query", None)
+    query_emb = embed_query(effective_query) if callable(embed_query) else embedder.embed(effective_query)
 
     candidates = hybrid_retrieve(
         query=effective_query,
@@ -291,11 +293,53 @@ def _retrieve_candidates(
         filters=_map_filters(filters),
     )
 
-    if settings.reranker_enabled:
-        reranker = default_reranker()
-        candidates = reranker.rerank(query, candidates, top_k=effective_top_k)
+    candidates, rerank_status = _maybe_rerank(query, candidates, rerank)
 
-    return candidates, effective_query
+    # pack_context may add linked documents (GRAPH_MODE=expand); it needs the
+    # query vector and the filters that produced these candidates.
+    carried = CandidateList(candidates)
+    carried.query_emb = query_emb
+    carried.filters = _map_filters(filters)
+    carried.rerank_status = rerank_status
+    return carried, effective_query
+
+
+# Re-ranking is the only CPU-heavy step of a request (seconds). The endpoint is
+# public, so it must not be possible to keep every core busy by asking many
+# questions at once: at most RERANKER_MAX_CONCURRENT re-rankings run, and a
+# request that finds them taken gets the fused ranking instead of waiting.
+_RERANK_SEM = Semaphore(max(1, int(getattr(settings, "reranker_max_concurrent", 1))))
+
+
+def _maybe_rerank(query: str, candidates: list, rerank: bool | None) -> tuple[list, str]:
+    if not settings.reranker_enabled:
+        return candidates, "off"
+    if rerank is False:
+        return candidates, "skipped_by_request"
+    if not candidates:
+        return candidates, "no_candidates"
+    if not _RERANK_SEM.acquire(blocking=False):
+        return candidates, "skipped_busy"
+    try:
+        return default_reranker().rerank(query, candidates), "applied"
+    except Exception as exc:  # a missing model must not fail retrieval
+        print(f"[rerank] skipped: {exc!r}")
+        return candidates, "skipped_error"
+    finally:
+        _RERANK_SEM.release()
+
+
+def _sources_only_answer(citations: list[Citation], reason: str, limit: int = 6) -> str:
+    lines = [
+        "Svaret er ikke formulert: språkmodellen er ikke tilgjengelig akkurat nå.",
+        f"Årsak: {reason}",
+        "",
+        "Kildene under er hentet og rangert for spørsmålet, og kan leses direkte:",
+    ]
+    for i, c in enumerate(citations[:limit], start=1):
+        excerpt = " ".join((c.excerpt or "").split())[:220]
+        lines.append(f"[{i}] {c.title}: {excerpt}")
+    return "\n".join(lines)
 
 
 def _render_response(
@@ -348,14 +392,26 @@ def _render_response(
             retrieval_debug=packed.debug,
         )
 
-    with _LLM_SEM:
-        answer = compose_answer(
-            message,
-            packed,
-            model_profile=model_profile,
-            router_instruction=router_instruction,
-            case_id=prompt_case_id,
-            answer_contract=answer_contract,
+    try:
+        with _LLM_SEM:
+            answer = compose_answer(
+                message,
+                packed,
+                model_profile=model_profile,
+                router_instruction=router_instruction,
+                case_id=prompt_case_id,
+                answer_contract=answer_contract,
+            )
+    except LLMUnavailable as e:
+        # Retrieval worked; only the formulation is missing. Say so and hand over
+        # the ranked sources instead of failing the whole request.
+        packed.debug["generation_skipped"] = True
+        packed.debug["generation_error"] = str(e)
+        packed.debug["evaluation_gate"] = run_evaluation_gate(citations, plan.evaluation)
+        return ChatResponse(
+            answer=_sources_only_answer(citations, str(e)),
+            citations=citations,
+            retrieval_debug=packed.debug,
         )
 
     if _wants_quotes(message):
@@ -1371,6 +1427,45 @@ def answer_question(
     model_profile: Optional[str] = None,
     prompt_profile_case_id: Optional[str] = None,
 ) -> ChatResponse:
+    """Answer a question; if the language model is unavailable in any answer
+    mode, return the ranked sources with an explicit note instead of failing."""
+    try:
+        return _answer_question_impl(
+            message,
+            conversation_id=conversation_id,
+            filters=filters,
+            top_k=top_k,
+            model_profile=model_profile,
+            prompt_profile_case_id=prompt_profile_case_id,
+        )
+    except LLMUnavailable as e:
+        retrieved = retrieve_context(
+            message,
+            conversation_id=conversation_id,
+            filters=filters,
+            top_k=top_k,
+            model_profile=model_profile,
+            prompt_profile_case_id=prompt_profile_case_id,
+            rewrite_query=False,
+        )
+        debug = dict(retrieved.retrieval_debug or {})
+        debug["generation_skipped"] = True
+        debug["generation_error"] = str(e)
+        return ChatResponse(
+            answer=_sources_only_answer(retrieved.citations, str(e)),
+            citations=retrieved.citations,
+            retrieval_debug=debug,
+        )
+
+
+def _answer_question_impl(
+    message: str,
+    conversation_id: Optional[str] = None,
+    filters: Optional[Dict[str, Any]] = None,
+    top_k: Optional[int] = None,
+    model_profile: Optional[str] = None,
+    prompt_profile_case_id: Optional[str] = None,
+) -> ChatResponse:
     del conversation_id  # Reserved for future conversation-aware prompts.
     filters = filters or {}
     plan = plan_query(message, filters)
@@ -1434,6 +1529,82 @@ def answer_question(
             _detail_instruction(plan),
         ),
         rewrite_query=plan.answer_mode.rewrite_query if plan.answer_mode else None,
+    )
+
+
+def retrieve_context(
+    message: str,
+    conversation_id: Optional[str] = None,
+    filters: Optional[Dict[str, Any]] = None,
+    top_k: Optional[int] = None,
+    model_profile: Optional[str] = None,
+    prompt_profile_case_id: Optional[str] = None,
+    rewrite_query: Optional[bool] = None,
+    max_context_chars: Optional[int] = None,
+    rerank: Optional[bool] = None,
+) -> RetrieveResponse:
+    del conversation_id  # Reserved for future conversation-aware retrieval.
+    filters = filters or {}
+    plan = plan_query(message, filters)
+    effective_filters = dict(plan.filters)
+    effective_top_k = _effective_top_k(top_k, plan.retrieval)
+    retrieval_message = _retrieval_message(message, plan)
+
+    # Retrieval-only is intentionally conservative by default: it should not
+    # require an LLM call unless a client explicitly opts into query rewrite.
+    candidates, effective_query = _retrieve_candidates(
+        query=retrieval_message,
+        filters=effective_filters,
+        retrieval=plan.retrieval,
+        model_profile=model_profile,
+        rewrite_query=bool(rewrite_query),
+        effective_top_k=effective_top_k,
+        rerank=rerank,
+    )
+    packed = pack_context(
+        candidates,
+        effective_top_k,
+        max_chunks_per_doc=int(plan.retrieval.get("max_chunks_per_doc", settings.max_chunks_per_doc)),
+    )
+    if packed.debug is None:
+        packed.debug = {}
+    packed.debug["rerank"] = getattr(candidates, "rerank_status", "off")
+
+    prompt_case_id = _prompt_case_id(plan, prompt_profile_case_id)
+    prompt_system_path, prompt_answer_path, prompt_system_source, prompt_answer_source = resolve_effective_paths(
+        case_id=prompt_case_id
+    )
+    packed.debug["query_plan"] = _build_query_plan(
+        plan=plan,
+        prompt_profile_case_id=prompt_profile_case_id,
+        prompt_case_id=prompt_case_id,
+        prompt_system_path=prompt_system_path,
+        prompt_answer_path=prompt_answer_path,
+        prompt_system_source=prompt_system_source,
+        prompt_answer_source=prompt_answer_source,
+        extra_fields={
+            "retrieval_query_input": retrieval_message,
+            "effective_query": effective_query,
+            "effective_filters": effective_filters,
+            "generation_skipped": True,
+            "rewrite_query_requested": bool(rewrite_query),
+        },
+    )
+    packed.debug["evaluation_gate"] = run_evaluation_gate(packed.citations, plan.evaluation)
+
+    context_text = packed.context_text
+    if max_context_chars is not None and len(context_text) > int(max_context_chars):
+        context_text = context_text[: int(max_context_chars)]
+        packed.debug["context_truncated"] = True
+        packed.debug["max_context_chars"] = int(max_context_chars)
+    else:
+        packed.debug["context_truncated"] = False
+
+    return RetrieveResponse(
+        context_text=context_text,
+        citations=packed.citations,
+        retrieval_debug=packed.debug,
+        trace=packed.debug.get("query_plan"),
     )
 
 

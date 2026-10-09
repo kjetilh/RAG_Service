@@ -33,6 +33,13 @@ Dette repoet er ment som:
 - Compose-oppsett (multi-RAG på VPS): `docker/docker-compose.vps.yml`
 - Miljøvariabler: `.env.example`
 - SQL schema: `app/rag/index/schema.sql`
+- Full route-inventar: `docs/RAG_SERVICE_API_ENDPUNKTER.md`
+- RAG-case schema og semantikk: `docs/RAG_CASES_SCHEMA.md`
+- Copilot/agent-bruk av RAG: `docs/COPILOT_RAG_USAGE.md`
+- PyCellProtocol RAG Gateway: `docs/PYCELL_RAG_GATEWAY.md`
+- CellProtocol-tilgjengelighetsvurdering: `docs/RAG_CELLPROTOCOL_ACCESSIBILITY_REPORT.md`
+- Doc lifecycle og tombstones: `docs/DOC_LIFECYCLE_TOMBSTONES.md`
+- Query-plan/trace schema: `docs/QUERY_PLAN_TRACE_SCHEMA.md`
 - VPS-guide: `docs/DEPLOY_VPS.md`
 - VPS-guide (multi-RAG + scaffold): `docs/DEPLOY_VPS_MULTI_RAG.md`
 
@@ -137,6 +144,12 @@ docker compose -f docker/docker-compose.yml up -d --build
 curl http://localhost:8000/health
 ```
 
+5. Verifiser at runtime matcher API-kontrakten som CellScaffold/Copilot forventer.
+
+```bash
+python -m scripts.rag_runtime_check http://localhost:8000
+```
+
 ### Ingest-avhengigheter i Docker (viktig)
 
 Docker-image for API bygger fra `docker/Dockerfile` og installerer disse extras:
@@ -216,22 +229,48 @@ Se `docs/SYNC_ORCHESTRATOR.md` for full oppsett (inkl. systemd timer).
 
 ## API-endepunkter
 
+Dette er en kort oppsummering. For eksplisitt route-inventar med auth per gruppe, bruk `docs/RAG_SERVICE_API_ENDPUNKTER.md`.
+
 - `GET /health`
+- `GET /v1/cases`
+- `GET /v1/cases/{case_id}/status`
+- `POST /v1/cases/{case_id}/retrieve`
+- `GET /v1/cases/{case_id}/corpus`
+- `GET /v1/cases/{case_id}/links`
+- `GET /v1/cases/{case_id}/documents/{doc_id}/links`
 - `POST /v1/query`
+- `POST /v1/retrieve`
 - `POST /v1/chat`
 - `POST /v1/chat/stream`
 - `GET /v1/documents/{doc_id}/download`
+- `POST /v1/interviews/collective-summary`
 - `GET /v1/cell/cases`
 - `POST /v1/cell/cases/{case_id}/query`
+- `POST /v1/cell/cases/{case_id}/retrieve`
+- `GET /v1/cell/cases/{case_id}/status`
+- `POST /v1/cell/cases/{case_id}/interviews/collective-summary`
 - `GET /v1/cell/cases/{case_id}/corpus`
 - `GET /v1/cell/cases/{case_id}/links`
 - `GET /v1/cell/cases/{case_id}/documents/{doc_id}/links`
 - `GET /v1/cell/cases/{case_id}/members`
 - `PUT /v1/cell/cases/{case_id}/members/{user_id}`
 - `DELETE /v1/cell/cases/{case_id}/members/{user_id}`
+- `GET /v1/research/cases`
+- `POST /v1/research/query`
+- `POST /v1/research/retrieve`
+- `GET /v1/research/cases/{case_id}/status`
+- `GET /v1/research/cases/{case_id}/corpus`
+- `GET /v1/research/cases/{case_id}/links`
+- `GET /v1/research/cases/{case_id}/documents/{doc_id}/links`
+- `GET /v1/research/documents/{doc_id}/download`
 - `POST /v1/admin/rebuild` (krever `X-API-Key` + `{"confirm": true}`)
 - `POST /v1/admin/ingest` (krever `X-API-Key`)
 - `POST /v1/admin/sync` (krever `X-API-Key`)
+- `POST /v1/admin/catalog/publish` (krever `X-API-Key`)
+- `POST /v1/admin/catalog/reindex` (krever `X-API-Key`)
+- `GET /v1/admin/catalog/status` (krever `X-API-Key`)
+- `POST /v1/admin/media/publish` (krever `X-API-Key`)
+- `GET /v1/admin/media/status` (krever `X-API-Key`)
 - `GET /v1/admin/coverage-report` (krever `X-API-Key`)
 - `GET /v1/admin/coverage-actions` (krever `X-API-Key`)
 - `GET /v1/admin/prompt-config` (krever `X-API-Key`)
@@ -243,12 +282,17 @@ Se `docs/SYNC_ORCHESTRATOR.md` for full oppsett (inkl. systemd timer).
 `/v1/query` støtter i tillegg:
 - `case_id` for eksplisitt valg av RAG-case (fra `config/rag_cases.yml`).
 
+`/v1/retrieve`, `/v1/cases/{case_id}/retrieve`, `/v1/cell/cases/{case_id}/retrieve` og `/v1/research/retrieve` returnerer pakket `context_text` + `citations` uten slutt-generering. Dette er den anbefalte flaten for Copilot/agentbruk og små lokale språkmodeller som skal konsumere prosjektets korpus.
+
 CellScaffold-integrasjon kan bruke `/v1/cell/cases/{case_id}/query` for tvungen case-tilordning + RBAC.
 Når `CELL_ACCESS_CONTROL_ENABLED=true` kreves:
 - `X-Cell-Gateway-Secret: <CELL_GATEWAY_SHARED_SECRET>`
 - `X-Cell-User-Id: <autentisert bruker-id i Scaffold>`
 
 `X-API-Key` (admin) bypasser RBAC for drift/feilsøking.
+
+Research-API-et bruker ikke `X-API-Key`.
+Det krever `Authorization: Bearer <token>`, og `GET /v1/research/documents/{doc_id}/download` kan ogsa bruke en kortlivet signert URL.
 
 Eksempel oppdatering av aktiv prompt-konfig:
 

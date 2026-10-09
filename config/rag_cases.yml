@@ -5,9 +5,9 @@ cases:
     description: Utvikler- og kodeassistent-RAG for CellProtocol, implementerte celler og dokumentert kodebruk.
     enabled: true
     planner:
-      docs_source_types: ["haven_docs", "cellprotocol_docs"]
+      docs_source_types: ["haven_docs", "cellprotocol_docs", "cellscaffold_internal_docs", "dimy_private_dev_docs"]
       prompts_source_types: []
-      docs_keywords: ["api", "endpoint", "kode", "code", "arkitektur", "architecture", "sync", "ingest", "deploy", "database", "cellprotocol", "cell", "skeleton", "configuration", "flow"]
+      docs_keywords: ["api", "endpoint", "kode", "code", "arkitektur", "architecture", "sync", "ingest", "deploy", "database", "cellprotocol", "cellscaffold", "cell", "skeleton", "configuration", "flow", "porthole", "raggateway", "workbench", "internal"]
       prompt_keywords: []
       default_domain: docs
     retrieval:

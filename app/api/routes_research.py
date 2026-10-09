@@ -17,21 +17,24 @@ from sqlalchemy import text
 
 from app.api.case_browse import (
     CaseSummary,
+    CaseStatusResponse,
     CasesResponse,
     CorpusResponse,
     LinkGraphResponse,
     _build_link_graph,
     _case_source_types,
+    _case_status,
     _corpus_rows,
 )
 from app.api.routes_chat import _document_file_path, _resolve_download_path, _run_query
-from app.models.schemas import Citation, QueryRequest, QueryResponse
+from app.models.schemas import Citation, QueryRequest, QueryResponse, RetrieveResponse
 from app.rag.access.control import case_exists
 from app.rag.cases.guidance import case_guidance, query_case_guidance
 from app.rag.cases.loader import load_rag_cases
 from app.rag.cases.visibility import visible_case_ids
 from app.rag.generate.llm_provider import ModelProfileError
 from app.rag.index.db import engine
+from app.rag.pipeline import retrieve_context
 from app.settings import settings
 
 router = APIRouter()
@@ -59,6 +62,18 @@ class ResearchQueryRequest(BaseModel):
     top_k: int | None = None
     model_profile: str | None = Field(default=None, min_length=1, max_length=64)
     prompt_profile_case_id: str | None = Field(default=None, min_length=1, max_length=80)
+
+
+class ResearchRetrieveRequest(BaseModel):
+    case_id: str = Field(..., min_length=1, max_length=80)
+    query: str = Field(..., min_length=1)
+    conversation_id: str | None = None
+    filters: dict[str, Any] | None = None
+    top_k: int | None = None
+    model_profile: str | None = Field(default=None, min_length=1, max_length=64)
+    prompt_profile_case_id: str | None = Field(default=None, min_length=1, max_length=80)
+    rewrite_query: bool | None = None
+    max_context_chars: int | None = Field(default=None, ge=1, le=200000)
 
 
 class SignedDownloadGrant(BaseModel):
@@ -267,6 +282,27 @@ def _rewrite_query_response_for_research(response: QueryResponse, identity: Rese
     )
 
 
+def _rewrite_retrieve_response_for_research(response: RetrieveResponse, identity: ResearchIdentity) -> RetrieveResponse:
+    rewritten_citations = [
+        Citation(
+            **{
+                **_citation_payload(citation),
+                "download_url": _research_download_url(citation.doc_id, identity),
+            }
+        )
+        for citation in response.citations
+    ]
+    trace = None
+    if response.retrieval_debug and isinstance(response.retrieval_debug, dict):
+        trace = response.retrieval_debug.get("query_plan")
+    return RetrieveResponse(
+        context_text=response.context_text,
+        citations=rewritten_citations,
+        retrieval_debug=response.retrieval_debug,
+        trace=trace,
+    )
+
+
 def _document_case_ids(doc_id: str) -> set[str]:
     sql = """
     SELECT source_type, doc_state
@@ -394,6 +430,37 @@ def research_query(req: ResearchQueryRequest, identity: ResearchIdentity = Depen
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
 
 
+@router.post("/v1/research/retrieve", response_model=RetrieveResponse)
+def research_retrieve(req: ResearchRetrieveRequest, identity: ResearchIdentity = Depends(_resolve_research_identity)):
+    _require_scope(identity, "research:read")
+    _require_case_access(req.case_id, identity)
+    try:
+        response = retrieve_context(
+            message=req.query,
+            conversation_id=req.conversation_id,
+            filters={**(req.filters or {}), "rag_case_id": req.case_id},
+            top_k=req.top_k,
+            model_profile=req.model_profile,
+            prompt_profile_case_id=req.prompt_profile_case_id,
+            rewrite_query=req.rewrite_query,
+            max_context_chars=req.max_context_chars,
+            rerank=getattr(req, "rerank", None),
+        )
+        if response.retrieval_debug and isinstance(response.retrieval_debug, dict):
+            query_plan = response.retrieval_debug.get("query_plan")
+            if isinstance(query_plan, dict):
+                guidance = query_case_guidance(req.case_id, req.query)
+                if guidance:
+                    query_plan["case_guidance"] = guidance
+        return _rewrite_retrieve_response_for_research(response, identity)
+    except ModelProfileError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
+
+
 @router.get("/v1/research/cases/{case_id}/corpus", response_model=CorpusResponse)
 def research_corpus(
     case_id: str,
@@ -407,6 +474,13 @@ def research_corpus(
     _require_case_access(case_id, identity)
     total, rows = _corpus_rows(case_id, q, include_tombstones, limit, offset)
     return CorpusResponse(case_id=case_id, total=total, limit=limit, offset=offset, items=rows)
+
+
+@router.get("/v1/research/cases/{case_id}/status", response_model=CaseStatusResponse)
+def research_case_status(case_id: str, identity: ResearchIdentity = Depends(_resolve_research_identity)):
+    _require_scope(identity, "research:read")
+    _require_case_access(case_id, identity)
+    return _case_status(case_id)
 
 
 @router.get("/v1/research/cases/{case_id}/links", response_model=LinkGraphResponse)

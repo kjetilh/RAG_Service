@@ -21,7 +21,8 @@ def upsert_document(doc_id: str, title: str, author: str | None, year: int | Non
       title=EXCLUDED.title, author=EXCLUDED.author, year=EXCLUDED.year,
       source_type=EXCLUDED.source_type, content_hash=EXCLUDED.content_hash,
       publisher=EXCLUDED.publisher, url=EXCLUDED.url, language=EXCLUDED.language,
-      identifiers=EXCLUDED.identifiers, meta_sources=EXCLUDED.meta_sources, file_path=EXCLUDED.file_path
+      identifiers=EXCLUDED.identifiers, meta_sources=EXCLUDED.meta_sources, file_path=EXCLUDED.file_path,
+      updated_at=now()
     '''
     with engine().begin() as conn:
         conn.execute(text(sql), {
@@ -39,19 +40,22 @@ def upsert_document(doc_id: str, title: str, author: str | None, year: int | Non
             "file_path": file_path,
         })
 
-def upsert_chunk(chunk_id: str, doc_id: str, section_path: str | None, ordinal: int, content: str):
+def upsert_chunk(chunk_id: str, doc_id: str, section_path: str | None, ordinal: int, content: str,
+                 index_text: str | None = None):
     # Postgres TEXT cannot contain NUL bytes (0x00)
     content = content.replace("\x00", "")
+    index_text = index_text.replace("\x00", "") if index_text else None
     sql = '''
-    INSERT INTO chunks(chunk_id, doc_id, section_path, ordinal, content, content_tsv)
-    VALUES (:chunk_id, :doc_id, :section_path, :ordinal, :content, to_tsvector('simple', :content))
+    INSERT INTO chunks(chunk_id, doc_id, section_path, ordinal, content, index_text, content_tsv)
+    VALUES (:chunk_id, :doc_id, :section_path, :ordinal, :content, :index_text,
+            to_tsvector('simple', COALESCE(:index_text, :content)))
     ON CONFLICT (chunk_id) DO UPDATE SET
-      content=EXCLUDED.content, content_tsv=EXCLUDED.content_tsv,
+      content=EXCLUDED.content, content_tsv=EXCLUDED.content_tsv, index_text=EXCLUDED.index_text,
       section_path=EXCLUDED.section_path, ordinal=EXCLUDED.ordinal
     '''
     with engine().begin() as conn:
         conn.execute(text(sql), {"chunk_id": chunk_id, "doc_id": doc_id, "section_path": section_path,
-                                 "ordinal": ordinal, "content": content})
+                                 "ordinal": ordinal, "content": content, "index_text": index_text})
 
 def ingest_file(path: Path, source_type: str | None = None, author: str | None = None, year: int | None = None) -> str:
     raw = load_any(path)
@@ -67,12 +71,14 @@ def ingest_file(path: Path, source_type: str | None = None, author: str | None =
                   identifiers_json=meta.identifiers_json, meta_sources_json=meta.meta_sources_json,
                   file_path=meta.file_path)
 
-    chunks = chunk_text(doc_id, txt)
+    chunks = chunk_text(doc_id, txt, doc_title=title)
     for ch in chunks:
-        upsert_chunk(ch.chunk_id, ch.doc_id, ch.section_path, ch.ordinal, ch.content)
+        upsert_chunk(ch.chunk_id, ch.doc_id, ch.section_path, ch.ordinal, ch.content, ch.index_text)
 
+    if not chunks:
+        return doc_id
     embedder = default_embedder()
-    vecs = embedder.embed([c.content for c in chunks])
+    vecs = embedder.embed_passages([c.index_text or c.content for c in chunks])
     for ch, v in zip(chunks, vecs):
         upsert_embedding(ch.chunk_id, v)
     return doc_id

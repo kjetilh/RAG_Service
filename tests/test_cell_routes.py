@@ -2,7 +2,7 @@ import pytest
 from fastapi import HTTPException
 
 from app.api import routes_cell
-from app.models.schemas import ChatResponse, Citation, QueryRequest
+from app.models.schemas import ChatResponse, Citation, QueryRequest, RetrieveRequest, RetrieveResponse
 from app.rag.access.control import CaseMember
 from app.rag.interviews.collective import InterviewQuestion, PreparedQuestionSet
 from app.settings import settings
@@ -105,6 +105,39 @@ def test_cell_query_sets_case_id_and_returns_trace(monkeypatch):
     assert captured["filters"]["source_type"] == ["haven_docs"]
     assert captured["prompt_profile_case_id"] == "innovasjon_intervjuer"
     assert resp.trace["selected_case"] == "dimy_docs"
+
+
+def test_cell_retrieve_sets_case_filter(monkeypatch):
+    settings.cell_access_control_enabled = True
+    monkeypatch.setattr(routes_cell, "case_exists", lambda _case_id: True)
+    monkeypatch.setattr(routes_cell, "has_case_role", lambda *_args: True)
+    monkeypatch.setattr(routes_cell, "resolve_case_role", lambda *_args: "viewer")
+    monkeypatch.setattr(routes_cell, "validate_model_profile", lambda _profile: None)
+
+    captured = {}
+
+    def _fake_retrieve_context(**kwargs):
+        captured.update(kwargs)
+        return RetrieveResponse(
+            context_text="context",
+            citations=[Citation(doc_id="d1", title="t", chunk_id="c1", score=0.8, excerpt="x")],
+            retrieval_debug={"query_plan": {"selected_case": "dimy_docs"}},
+            trace={"selected_case": "dimy_docs"},
+        )
+
+    monkeypatch.setattr(routes_cell, "retrieve_context", _fake_retrieve_context)
+
+    resp = routes_cell.cell_retrieve(
+        "dimy_docs",
+        RetrieveRequest(query="hello", filters={"source_type": ["haven_docs"]}, rewrite_query=False),
+        identity=routes_cell.CellIdentity(user_id="u2"),
+    )
+
+    assert captured["message"] == "hello"
+    assert captured["filters"]["source_type"] == ["haven_docs"]
+    assert captured["filters"]["rag_case_id"] == "dimy_docs"
+    assert captured["rewrite_query"] is False
+    assert resp.context_text == "context"
 
 
 def test_member_upsert_requires_owner_or_admin_key(monkeypatch):

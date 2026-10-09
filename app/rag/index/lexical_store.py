@@ -1,7 +1,11 @@
 from sqlalchemy import text
 from app.rag.index.db import engine
+from app.settings import settings
 
 def lexical_search(query: str, top_k: int = 50, filters: dict | None = None):
+    if str(getattr(settings, "lexical_mode", "and")).lower() == "bm25":
+        from app.rag.index.bm25_store import bm25_search
+        return bm25_search(query, top_k=top_k, filters=filters)
     filters = filters or {}
     where = [
         "c.content_tsv @@ plainto_tsquery('simple', :q)",
@@ -25,7 +29,8 @@ def lexical_search(query: str, top_k: int = 50, filters: dict | None = None):
     SELECT c.chunk_id, c.doc_id, c.ordinal, d.title, d.author, d.year, d.source_type,
            d.publisher, d.url, d.language, d.identifiers,
            c.content,
-           ts_rank_cd(c.content_tsv, plainto_tsquery('simple', :q)) AS score
+           ts_rank_cd(c.content_tsv, plainto_tsquery('simple', :q)) AS score,
+           c.section_path
     FROM chunks c
     JOIN documents d ON d.doc_id = c.doc_id
     {where_sql}

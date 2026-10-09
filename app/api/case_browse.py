@@ -79,6 +79,50 @@ class LinkGraphResponse(BaseModel):
     items: list[LinkEdge]
 
 
+class CaseSourceTypeStatus(BaseModel):
+    source_type: str
+    document_count: int = 0
+    active_document_count: int = 0
+    tombstone_document_count: int = 0
+    chunk_count: int = 0
+
+
+class CaseDatabaseStatus(BaseModel):
+    documents_table: bool
+    chunks_table: bool
+    embeddings_table: bool
+    has_doc_state: bool
+    has_updated_at: bool
+    schema_warnings: list[str] = Field(default_factory=list)
+
+
+class CaseRuntimeStatus(BaseModel):
+    embedding_model: str
+    llm_provider: str
+    llm_model: str
+    model_profiles: list[str] = Field(default_factory=list)
+    next_gen_rag_enabled: bool
+    reranker_enabled: bool
+    query_rewrite_enabled: bool
+
+
+class CaseStatusResponse(BaseModel):
+    case_id: str
+    description: str
+    enabled: bool
+    configured_source_types: list[str]
+    present_source_types: list[str]
+    missing_source_types: list[str]
+    total_documents: int
+    active_documents: int
+    tombstone_documents: int
+    total_chunks: int
+    last_updated_at: datetime | None = None
+    source_types: list[CaseSourceTypeStatus]
+    database: CaseDatabaseStatus
+    runtime: CaseRuntimeStatus
+
+
 def _case_source_types(case_id: str) -> list[str]:
     cfg = load_rag_cases(settings.rag_cases_path)
     selected = case_by_id(cfg, case_id)
@@ -98,6 +142,169 @@ def _sql_case_type_filter(source_types: list[str], params: dict[str, Any], claus
         return
     params["source_types"] = source_types
     clauses.append("d.source_type = ANY(:source_types)")
+
+
+def _relation_exists(conn, relation_name: str) -> bool:
+    return bool(
+        conn.execute(
+            text("SELECT to_regclass(:relation_name) IS NOT NULL"),
+            {"relation_name": f"public.{relation_name}"},
+        ).scalar()
+    )
+
+
+def _column_exists(conn, table_name: str, column_name: str) -> bool:
+    return bool(
+        conn.execute(
+            text(
+                """
+                SELECT EXISTS (
+                  SELECT 1
+                  FROM information_schema.columns
+                  WHERE table_schema = 'public'
+                    AND table_name = :table_name
+                    AND column_name = :column_name
+                )
+                """
+            ),
+            {"table_name": table_name, "column_name": column_name},
+        ).scalar()
+    )
+
+
+def _model_profile_names() -> list[str]:
+    import json
+
+    raw = (settings.llm_profiles_json or "").strip()
+    if not raw:
+        return []
+    try:
+        parsed = json.loads(raw)
+    except Exception:
+        return ["<invalid LLM_PROFILES_JSON>"]
+    if not isinstance(parsed, dict):
+        return ["<invalid LLM_PROFILES_JSON>"]
+    return sorted(str(key) for key in parsed.keys())
+
+
+def _case_status(case_id: str) -> CaseStatusResponse:
+    cfg = load_rag_cases(settings.rag_cases_path)
+    selected = case_by_id(cfg, case_id)
+    configured_source_types = _case_source_types(case_id)
+    params: dict[str, Any] = {"source_types": configured_source_types}
+    source_clause = "d.source_type = ANY(:source_types)" if configured_source_types else "TRUE"
+
+    with engine().begin() as conn:
+        documents_table = _relation_exists(conn, "documents")
+        chunks_table = _relation_exists(conn, "chunks")
+        embeddings_table = _relation_exists(conn, "embeddings")
+        has_doc_state = documents_table and _column_exists(conn, "documents", "doc_state")
+        has_updated_at = documents_table and _column_exists(conn, "documents", "updated_at")
+
+        warnings: list[str] = []
+        if not documents_table:
+            warnings.append("documents table is missing")
+        if not chunks_table:
+            warnings.append("chunks table is missing")
+        if not embeddings_table:
+            warnings.append("embeddings table is missing")
+        if documents_table and not has_doc_state:
+            warnings.append("documents.doc_state is missing; database looks like a legacy schema")
+        if documents_table and not has_updated_at:
+            warnings.append("documents.updated_at is missing; last update metadata is limited")
+
+        if not documents_table:
+            rows: list[dict[str, Any]] = []
+            last_updated_at = None
+        else:
+            state_select = (
+                """
+                COUNT(DISTINCT d.doc_id) FILTER (WHERE COALESCE(d.doc_state, 'active') = 'active') AS active_document_count,
+                COUNT(DISTINCT d.doc_id) FILTER (WHERE COALESCE(d.doc_state, 'active') IN ('tombstone', 'tombstone_pending')) AS tombstone_document_count,
+                """
+                if has_doc_state
+                else """
+                COUNT(DISTINCT d.doc_id) AS active_document_count,
+                0 AS tombstone_document_count,
+                """
+            )
+            chunk_join = (
+                "LEFT JOIN chunks c ON c.doc_id = d.doc_id"
+                if chunks_table
+                else "LEFT JOIN (SELECT NULL::text AS doc_id, NULL::text AS chunk_id) c ON FALSE"
+            )
+            status_sql = text(
+                f"""
+                SELECT
+                  COALESCE(d.source_type, '') AS source_type,
+                  COUNT(DISTINCT d.doc_id) AS document_count,
+                  {state_select}
+                  COUNT(c.chunk_id) AS chunk_count
+                FROM documents d
+                {chunk_join}
+                WHERE {source_clause}
+                GROUP BY COALESCE(d.source_type, '')
+                ORDER BY COALESCE(d.source_type, '')
+                """
+            )
+            rows = [dict(row) for row in conn.execute(status_sql, params).mappings().all()]
+
+            updated_expr = "MAX(d.updated_at)" if has_updated_at else "MAX(d.created_at)"
+            last_updated_at = conn.execute(
+                text(
+                    f"""
+                    SELECT {updated_expr}
+                    FROM documents d
+                    WHERE {source_clause}
+                    """
+                ),
+                params,
+            ).scalar()
+
+    source_statuses = [
+        CaseSourceTypeStatus(
+            source_type=str(row.get("source_type") or "<empty>"),
+            document_count=int(row.get("document_count") or 0),
+            active_document_count=int(row.get("active_document_count") or 0),
+            tombstone_document_count=int(row.get("tombstone_document_count") or 0),
+            chunk_count=int(row.get("chunk_count") or 0),
+        )
+        for row in rows
+    ]
+    present = [item.source_type for item in source_statuses if item.document_count > 0 and item.source_type != "<empty>"]
+    missing = [source_type for source_type in configured_source_types if source_type not in set(present)]
+
+    return CaseStatusResponse(
+        case_id=selected.case_id,
+        description=selected.description,
+        enabled=bool(selected.enabled),
+        configured_source_types=configured_source_types,
+        present_source_types=present,
+        missing_source_types=missing,
+        total_documents=sum(item.document_count for item in source_statuses),
+        active_documents=sum(item.active_document_count for item in source_statuses),
+        tombstone_documents=sum(item.tombstone_document_count for item in source_statuses),
+        total_chunks=sum(item.chunk_count for item in source_statuses),
+        last_updated_at=last_updated_at,
+        source_types=source_statuses,
+        database=CaseDatabaseStatus(
+            documents_table=documents_table,
+            chunks_table=chunks_table,
+            embeddings_table=embeddings_table,
+            has_doc_state=has_doc_state,
+            has_updated_at=has_updated_at,
+            schema_warnings=warnings,
+        ),
+        runtime=CaseRuntimeStatus(
+            embedding_model=settings.embedding_model,
+            llm_provider=settings.llm_provider,
+            llm_model=settings.llm_model,
+            model_profiles=_model_profile_names(),
+            next_gen_rag_enabled=bool(settings.next_gen_rag_enabled),
+            reranker_enabled=bool(settings.reranker_enabled),
+            query_rewrite_enabled=bool(settings.query_rewrite_enabled),
+        ),
+    )
 
 
 def _corpus_rows(case_id: str, q: str | None, include_tombstones: bool, limit: int, offset: int) -> tuple[int, list[dict]]:

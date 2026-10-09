@@ -27,15 +27,19 @@ target_subdir = "cellprotocol/CellProtocolDocuments"
 [[source]]
 name = "CellScaffoldDocs"
 repo_path = "/srv/ops/repos/CellScaffold"
-source_type = "haven_docs"
-target_subdir = "cellprotocol/CellScaffold"
+repo_subpath = "Documentation"
+source_type = "cellscaffold_internal_docs"
+target_subdir = "cellscaffold/DocumentationCurated"
+include = ["AIGatewayCell.md", "AIGatewayCell_Evaluation.md", "AdminCells.md", "FlowDebugProbeCell.md", "RAG_MVP_UI.md", "Skeleton*.md", "Porthole-and-skeleton.md", "Porthole_Menu_og_Skeleton_Paritet.md", "ConfigurationCatalog/*.md", "ServiceCatalog/*.md", "PromptPurposeLab/README.md", "PromptPurposeLab/Schema_Validation_Architecture.md"]
+exclude = ["AIModelRuns/**", "Research/**", "TestData/**", "Operations/**", "PromptPurposeLab/generated/**", "PromptPurposeLab/Model_Download_Log_*.md", "ClaudeSkills/**", "Losningsforslag/**", "Mermaid/**", "ConfigurationCatalog/*.json", "ServiceCatalog/*.json", "*.json", "*.mmd", "*.original.md"]
 
 [[source]]
 name = "CellScaffoldPrompts"
 repo_path = "/srv/ops/repos/CellScaffold"
-source_type = "internal_prompts"
+source_type = "prompt_docs"
 target_subdir = "cellprotocol/CellScaffoldPrompts"
 include = ["**/*prompt*.md", "**/*Prompt*.md", "**/*.prompt", "prompts/**/*.md"]
+exclude = ["Documentation/AIModelRuns/**", "Documentation/Research/**", "Documentation/TestData/**", "Documentation/Operations/**"]
 
 [[source]]
 name = "RAGServiceCellCompositionDocs"

@@ -1,0 +1,192 @@
+{
+ "P0_deployed_logic": [
+  "base",
+  "minilm",
+  "and",
+  {
+   "fusion": "max"
+  }
+ ],
+ "P1_ctx_mmini_bm25_rrf": [
+  "ctx",
+  "mmini",
+  "bm25",
+  {
+   "fusion": "rrf"
+  }
+ ],
+ "P3_P1_graph_links": [
+  "ctx",
+  "mmini",
+  "bm25",
+  {
+   "fusion": "rrf",
+   "graph": "expand",
+   "g_kind": "links"
+  }
+ ],
+ "P11_P1_w_lex1.5": [
+  "ctx",
+  "mmini",
+  "bm25",
+  {
+   "fusion": "rrf",
+   "w": [
+    1.0,
+    1.5
+   ]
+  }
+ ],
+ "P12_P1_w_vec1.5": [
+  "ctx",
+  "mmini",
+  "bm25",
+  {
+   "fusion": "rrf",
+   "w": [
+    1.5,
+    1.0
+   ]
+  }
+ ],
+ "P13_P1_perdoc2": [
+  "ctx",
+  "mmini",
+  "bm25",
+  {
+   "fusion": "rrf",
+   "per_doc": 2
+  }
+ ],
+ "P14_P1_k100": [
+  "ctx",
+  "mmini",
+  "bm25",
+  {
+   "fusion": "rrf",
+   "kv": 100,
+   "kl": 100
+  }
+ ],
+ "P15_P1_graph_symbols": [
+  "ctx",
+  "mmini",
+  "bm25",
+  {
+   "fusion": "rrf",
+   "graph": "expand"
+  }
+ ],
+ "P16_P1_ppr_links": [
+  "ctx",
+  "mmini",
+  "bm25",
+  {
+   "fusion": "rrf",
+   "graph": "ppr",
+   "g_kind": "links",
+   "g_w": 0.3
+  }
+ ],
+ "P17_P1_graph_links_add1": [
+  "ctx",
+  "mmini",
+  "bm25",
+  {
+   "fusion": "rrf",
+   "graph": "expand",
+   "g_kind": "links",
+   "g_add": 1
+  }
+ ],
+ "P18_P1_graph_links_add3": [
+  "ctx",
+  "mmini",
+  "bm25",
+  {
+   "fusion": "rrf",
+   "graph": "expand",
+   "g_kind": "links",
+   "g_add": 3
+  }
+ ],
+ "P5_P1_rerank": [
+  "ctx",
+  "mmini",
+  "bm25",
+  {
+   "fusion": "rrf",
+   "rerank": "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
+  }
+ ],
+ "P7_P1_rerank_graph": [
+  "ctx",
+  "mmini",
+  "bm25",
+  {
+   "fusion": "rrf",
+   "rerank": "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1",
+   "graph": "expand",
+   "g_kind": "links"
+  }
+ ],
+ "P8_ctxS_mmini": [
+  "ctxS",
+  "mmini",
+  "bm25",
+  {
+   "fusion": "rrf"
+  }
+ ],
+ "P9_ctxL_mmini": [
+  "ctxL",
+  "mmini",
+  "bm25",
+  {
+   "fusion": "rrf"
+  }
+ ],
+ "P10_ctxnc_mmini": [
+  "ctxnc",
+  "mmini",
+  "bm25",
+  {
+   "fusion": "rrf"
+  }
+ ],
+ "P2_ctx_me5_bm25_rrf": [
+  "ctx",
+  "me5",
+  "bm25",
+  {
+   "fusion": "rrf"
+  }
+ ],
+ "P4_P2_graph_links": [
+  "ctx",
+  "me5",
+  "bm25",
+  {
+   "fusion": "rrf",
+   "graph": "expand",
+   "g_kind": "links"
+  }
+ ],
+ "P6_P2_rerank": [
+  "ctx",
+  "me5",
+  "bm25",
+  {
+   "fusion": "rrf",
+   "rerank": "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
+  }
+ ],
+ "P19_ctxS_me5": [
+  "ctxS",
+  "me5",
+  "bm25",
+  {
+   "fusion": "rrf"
+  }
+ ]
+}

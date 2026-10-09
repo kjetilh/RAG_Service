@@ -8,6 +8,14 @@ class Embedder:
     def embed(self, texts: list[str]) -> np.ndarray:
         raise NotImplementedError
 
+    def embed_passages(self, texts: list[str]) -> np.ndarray:
+        prefix = str(getattr(settings, "embedding_passage_prefix", "") or "")
+        return self.embed([prefix + t for t in texts] if prefix else texts)
+
+    def embed_query(self, text: str) -> np.ndarray:
+        prefix = str(getattr(settings, "embedding_query_prefix", "") or "")
+        return np.asarray(self.embed([prefix + text]))[0]
+
 class SentenceTransformersEmbedder(Embedder):
     def __init__(self, model_name: str):
         self.model = _load_sentence_transformer(model_name)

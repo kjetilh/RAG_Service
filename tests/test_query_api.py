@@ -7,6 +7,8 @@ from app.models.schemas import (
     ChatResponse,
     Citation,
     QueryRequest,
+    RetrieveRequest,
+    RetrieveResponse,
 )
 
 
@@ -34,6 +36,7 @@ def test_query_endpoint_passes_case_id_in_filters(monkeypatch):
         "load_rag_cases",
         lambda _path: type("Cfg", (), {"cases": [], "default_case": "innovasjon"})(),
     )
+    monkeypatch.setattr(routes_chat, "visible_case_ids", lambda _cfg: {"innovasjon", "innovasjon_intervjuer"})
     monkeypatch.setattr(routes_chat, "case_by_id", lambda _cfg, case_id: type("Case", (), {"case_id": case_id})())
 
     def fake_answer_question(**kwargs):
@@ -58,6 +61,41 @@ def test_query_endpoint_passes_case_id_in_filters(monkeypatch):
     assert captured["filters"]["rag_case_id"] == "innovasjon"
     assert captured["prompt_profile_case_id"] == "innovasjon_intervjuer"
     assert resp.trace["selected_case"] == "docs_case"
+
+
+def test_retrieve_endpoint_passes_case_id_in_filters(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(routes_chat, "validate_model_profile", lambda _: None)
+    monkeypatch.setattr(
+        routes_chat,
+        "load_rag_cases",
+        lambda _path: type("Cfg", (), {"cases": [], "default_case": "innovasjon"})(),
+    )
+    monkeypatch.setattr(routes_chat, "visible_case_ids", lambda _cfg: {"innovasjon"})
+    monkeypatch.setattr(routes_chat, "case_by_id", lambda _cfg, case_id: type("Case", (), {"case_id": case_id})())
+
+    def fake_retrieve_context(**kwargs):
+        captured.update(kwargs)
+        return RetrieveResponse(
+            context_text="context",
+            citations=[Citation(doc_id="d1", title="T", chunk_id="c1", score=0.9, excerpt="x")],
+            retrieval_debug={"query_plan": {"selected_case": "innovasjon"}},
+            trace={"selected_case": "innovasjon"},
+        )
+
+    monkeypatch.setattr(routes_chat, "retrieve_context", fake_retrieve_context)
+
+    resp = routes_chat.public_case_retrieve(
+        "innovasjon",
+        RetrieveRequest(query="hei", filters={"source_type": ["haven_docs"]}, top_k=3, max_context_chars=1200),
+    )
+
+    assert captured["message"] == "hei"
+    assert captured["top_k"] == 3
+    assert captured["filters"]["source_type"] == ["haven_docs"]
+    assert captured["filters"]["rag_case_id"] == "innovasjon"
+    assert captured["max_context_chars"] == 1200
+    assert resp.context_text == "context"
 
 
 def test_chat_endpoint_is_backward_compatible_shim(monkeypatch):
@@ -124,6 +162,7 @@ def test_run_query_adds_case_guidance_for_dimy_docs_composition_question(monkeyp
         "load_rag_cases",
         lambda _path: type("Cfg", (), {"cases": [], "default_case": "dimy_docs"})(),
     )
+    monkeypatch.setattr(routes_chat, "visible_case_ids", lambda _cfg: {"dimy_docs"})
     monkeypatch.setattr(routes_chat, "case_by_id", lambda _cfg, case_id: type("Case", (), {"case_id": case_id})())
     monkeypatch.setattr(routes_chat, "answer_question", lambda **_kwargs: _resp_with_plan())
 

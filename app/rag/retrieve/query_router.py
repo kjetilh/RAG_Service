@@ -39,7 +39,12 @@ def _parse_json_string_list(raw: str, fallback: List[str]) -> List[str]:
 def router_config_from_settings() -> QueryRouterConfig:
     docs_source_types = _parse_json_string_list(
         settings.query_router_docs_source_types_json,
-        ["haven_docs", "cellprotocol_docs"],
+        [
+            "haven_docs",
+            "cellprotocol_docs",
+            "cellscaffold_internal_docs",
+            "dimy_private_dev_docs",
+        ],
     )
     prompts_source_types = _parse_json_string_list(
         settings.query_router_prompts_source_types_json,
